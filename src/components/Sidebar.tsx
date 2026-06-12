@@ -1,7 +1,7 @@
 import { LayoutDashboard, Users, FileText, UserCheck, ClipboardCheck, Receipt, BarChart3, Map, ShieldCheck, Bell, Settings } from "lucide-react";
 import { cn } from "../utils/cn";
 
-export type ViewKey = "dashboard" | "clients" | "contracts" | "inspectors" | "inspections" | "billing" | "reports" | "roadmap";
+export type ViewKey = "dashboard" | "clients" | "contracts" | "inspectors" | "inspections" | "billing" | "reports" ;
 
 interface SidebarProps {
   active: ViewKey;
@@ -16,7 +16,7 @@ const navItems: { key: ViewKey; label: string; icon: typeof LayoutDashboard; bad
   { key: "inspections", label: "Workflow", icon: ClipboardCheck, badge: "3" },
   { key: "billing", label: "Billing", icon: Receipt },
   { key: "reports", label: "Reports", icon: BarChart3 },
-  { key: "roadmap", label: "Roadmap", icon: Map },
+
 ];
 
 export function Sidebar({ active, onSelect }: SidebarProps) {
@@ -28,7 +28,7 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
         </div>
         <div>
           <div className="text-sm font-semibold text-white">ICS</div>
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">Inspection Control</div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-500">Offshore & Energy Department Platform</div>
         </div>
       </div>
 
@@ -59,10 +59,10 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
 
       <div className="border-t border-slate-800/70 p-3">
         <div className="flex items-center gap-3 rounded-lg p-2 hover:bg-slate-800/60">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">MA</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">MO</div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium text-white">Mohammad Alizadeh</div>
-            <div className="text-[10px] text-slate-500">Admin · Operations</div>
+            <div className="truncate text-xs font-medium text-white">Mojtaba Omidvar</div>
+            <div className="text-[10px] text-slate-500">Department Manager</div>
           </div>
           <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
         </div>

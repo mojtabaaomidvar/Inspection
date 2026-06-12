@@ -17,7 +17,6 @@ export interface Client {
   national_id?: string;
   email?: string;
   phone?: string;
-  category: string;
   contacts: number;
   contracts: number;
   logoColor: string;
@@ -33,18 +32,23 @@ export interface Client {
 
 export interface Contract {
   id: string;
-  contract_no: string;
+  contract_no: string; // شماره داخلی ICS (اتوماتیک)
+  external_contract_no?: string; // شماره خارجی (اختیاری)
   client_id: string;
   client_name: string;
   contract_title: string;
-  start_date: string;
-  end_date: string;
+  start_date: string; // تاریخ شمسی
+  end_date: string; // تاریخ شمسی
   total_value: number;
   invoiced: number;
   currency: string;
   status: string;
   type: "CONTRACT" | "WORK_ORDER";
   tariffs: number;
+  department: string; // برای تولید شماره داخلی منحصر به فرد
+  description?: string;
+  payment_terms?: string;
+  notes?: string;
 }
 
 export interface TariffLine {
@@ -205,18 +209,105 @@ export const clients: Client[] = [
 
 // ============ CONTRACTS ============
 export const contracts: Contract[] = [
-  { id: "ct1", contract_no: "CTR-2026-0041", client_id: "c1", client_name: "TotalEnergies Pars", contract_title: "South Pars Phase 22 — TPI for Wellhead Platforms", start_date: "2026-01-15", end_date: "2027-01-14", total_value: 480000, invoiced: 187200, currency: "USD", status: "ACTIVE", type: "CONTRACT", tariffs: 4 },
-  { id: "ct2", contract_no: "CTR-2026-0039", client_id: "c2", client_name: "Mapna Group", contract_title: "Damavand Combined Cycle Power Plant — MWS Campaign", start_date: "2025-11-01", end_date: "2026-10-31", total_value: 280000, invoiced: 210500, currency: "USD", status: "ACTIVE", type: "CONTRACT", tariffs: 2 },
-  { id: "ct3", contract_no: "CTR-2025-0102", client_id: "c3", client_name: "Petro Iran Development", contract_title: "Offshore Pipeline Pre-commissioning — Ad-hoc WO", start_date: "2025-09-10", end_date: "2025-12-20", total_value: 62000, invoiced: 62000, currency: "USD", status: "CLOSED", type: "WORK_ORDER", tariffs: 3 },
-  { id: "ct4", contract_no: "CTR-2026-0047", client_id: "c4", client_name: "Sunair Renewables", contract_title: "Kavir Solar Farm 120MW — Module & Inverter Review", start_date: "2026-03-01", end_date: "2026-12-15", total_value: 95000, invoiced: 18500, currency: "USD", status: "ACTIVE", type: "CONTRACT", tariffs: 4 },
-  { id: "ct5", contract_no: "CTR-2026-0050", client_id: "c5", client_name: "Kian Infra Engineering", contract_title: "Tehran Metro Line 10 — Structural Steel TPI", start_date: "2026-05-10", end_date: "2027-05-09", total_value: 150000, invoiced: 0, currency: "USD", status: "PENDING", type: "CONTRACT", tariffs: 6 },
-  { id: "ct6", contract_no: "CTR-2026-0055", client_id: "c1", client_name: "TotalEnergies Pars", contract_title: "Wellhead Maintenance — WO Q2", start_date: "2026-03-01", end_date: "2026-09-30", total_value: 95000, invoiced: 32000, currency: "USD", status: "ACTIVE", type: "WORK_ORDER", tariffs: 4 },
-  { id: "ct7", contract_no: "CTR-2026-0060", client_id: "c1", client_name: "TotalEnergies Pars", contract_title: "NDT Services — Annual Framework", start_date: "2026-04-01", end_date: "2027-03-31", total_value: 120000, invoiced: 15000, currency: "USD", status: "ACTIVE", type: "CONTRACT", tariffs: 6 },
-  { id: "ct8", contract_no: "CTR-2026-0065", client_id: "c2", client_name: "Mapna Group", contract_title: "Turbine Overhaul — WO Phase 2", start_date: "2026-06-01", end_date: "2026-11-30", total_value: 180000, invoiced: 45000, currency: "USD", status: "ACTIVE", type: "WORK_ORDER", tariffs: 5 },
-  { id: "ct9", contract_no: "CTR-2026-0070", client_id: "c3", client_name: "Petro Iran Development", contract_title: "Platform Inspection — Annual", start_date: "2026-02-01", end_date: "2027-01-31", total_value: 220000, invoiced: 55000, currency: "USD", status: "ACTIVE", type: "CONTRACT", tariffs: 8 },
-  { id: "ct10", contract_no: "CTR-2026-0075", client_id: "c5", client_name: "Kian Infra Engineering", contract_title: "Bridge Inspection — WO", start_date: "2026-07-01", end_date: "2026-10-31", total_value: 75000, invoiced: 0, currency: "USD", status: "PENDING", type: "WORK_ORDER", tariffs: 3 },
-  { id: "ct11", contract_no: "CTR-2026-0080", client_id: "c6", client_name: "Arash Mohammadi", contract_title: "Freelance Inspection — Ad-hoc", start_date: "2026-05-15", end_date: "2026-06-15", total_value: 8500, invoiced: 8500, currency: "USD", status: "CLOSED", type: "WORK_ORDER", tariffs: 1 },
-  { id: "ct12", contract_no: "CTR-2026-0085", client_id: "c7", client_name: "Bahram Karimi", contract_title: "Power Plant Audit — Freelance", start_date: "2026-06-01", end_date: "2026-08-31", total_value: 12000, invoiced: 0, currency: "USD", status: "ACTIVE", type: "WORK_ORDER", tariffs: 2 },
+  {
+    id: "ct1",
+    contract_no: "CTR-UNA-1404-0001",
+    external_contract_no: "TE-2026-041",
+    client_id: "c1",
+    client_name: "TotalEnergies Pars",
+    contract_title: "South Pars Phase 22 — TPI for Wellhead Platforms",
+    start_date: "1404/10/25",
+    end_date: "1405/10/24",
+    total_value: 480000,
+    invoiced: 187200,
+    currency: "USD",
+    status: "ACTIVE",
+    type: "CONTRACT",
+    tariffs: 4,
+    department: "Unit A",
+  },
+  {
+    id: "ct2",
+    contract_no: "CTR-UNA-1404-0002",
+    external_contract_no: "MP-MWS-22-19",
+    client_id: "c2",
+    client_name: "Mapna Group",
+    contract_title: "Damavand Combined Cycle Power Plant — MWS Campaign",
+    start_date: "1404/08/10",
+    end_date: "1405/08/09",
+    total_value: 280000,
+    invoiced: 210500,
+    currency: "USD",
+    status: "ACTIVE",
+    type: "CONTRACT",
+    tariffs: 2,
+    department: "Unit A",
+  },
+  {
+    id: "ct3",
+    contract_no: "WO-UNA-1404-0001",
+    external_contract_no: "PID-WO-102",
+    client_id: "c3",
+    client_name: "Petro Iran Development",
+    contract_title: "Offshore Pipeline Pre-commissioning — Ad-hoc WO",
+    start_date: "1404/06/19",
+    end_date: "1404/09/29",
+    total_value: 62000,
+    invoiced: 62000,
+    currency: "USD",
+    status: "CLOSED",
+    type: "WORK_ORDER",
+    tariffs: 3,
+    department: "Unit A",
+  },
+  {
+    id: "ct4",
+    contract_no: "CTR-UNA-1404-0003",
+    client_id: "c4",
+    client_name: "Sunair Renewables",
+    contract_title: "Kavir Solar Farm 120MW — Module & Inverter Review",
+    start_date: "1404/12/11",
+    end_date: "1405/09/24",
+    total_value: 95000,
+    invoiced: 18500,
+    currency: "USD",
+    status: "ACTIVE",
+    type: "CONTRACT",
+    tariffs: 4,
+    department: "Unit A",
+  },
+  {
+    id: "ct5",
+    contract_no: "CTR-UNA-1405-0004",
+    client_id: "c5",
+    client_name: "Kian Infra Engineering",
+    contract_title: "Tehran Metro Line 10 — Structural Steel TPI",
+    start_date: "1405/02/20",
+    end_date: "1406/02/19",
+    total_value: 150000,
+    invoiced: 0,
+    currency: "USD",
+    status: "PENDING",
+    type: "CONTRACT",
+    tariffs: 6,
+    department: "Unit A",
+  },
+  {
+    id: "ct6",
+    contract_no: "WO-UNA-1405-0002",
+    client_id: "c1",
+    client_name: "TotalEnergies Pars",
+    contract_title: "Wellhead Maintenance — WO Q2",
+    start_date: "1404/12/11",
+    end_date: "1405/07/08",
+    total_value: 95000,
+    invoiced: 32000,
+    currency: "USD",
+    status: "ACTIVE",
+    type: "WORK_ORDER",
+    tariffs: 4,
+    department: "Unit A",
+  },
 ];
 
 // ============ CONTRACT TARIFFS ============

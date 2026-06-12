@@ -8,7 +8,6 @@ import { Inspectors } from "./views/Inspectors";
 import { Inspections } from "./views/Inspections";
 import { Billing } from "./views/Billing";
 import { Reports } from "./views/Reports";
-import { Roadmap } from "./views/Roadmap";
 
 const meta: Record<ViewKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Operations Dashboard", subtitle: "Live overview of inspections, revenue, and inspector workload" },
@@ -18,12 +17,12 @@ const meta: Record<ViewKey, { title: string; subtitle: string }> = {
   inspections: { title: "Inspection Workflow", subtitle: "5-step pipeline from request to completion" },
   billing: { title: "Billing & Invoices", subtitle: "Financial records tied to completed inspections" },
   reports: { title: "Reports & Analytics", subtitle: "Performance, quality, and financial intelligence" },
-  roadmap: { title: "Production Roadmap", subtitle: "The plan to take ICS from prototype to enterprise" },
 };
+
 
 export default function App() {
   const [view, setView] = useState<ViewKey>("dashboard");
-  const m = meta[view];
+  const m = meta[view]?? meta.dashboard;
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
@@ -38,7 +37,6 @@ export default function App() {
           {view === "inspections" && <Inspections />}
           {view === "billing" && <Billing />}
           {view === "reports" && <Reports />}
-          {view === "roadmap" && <Roadmap />}
         </div>
       </main>
     </div>
