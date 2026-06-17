@@ -1,6 +1,6 @@
 import { FixedSizeList as List } from "react-window";
 import { Avatar, Badge } from "./ui";
-import { Client } from "../views/Clients"; // یا مسیر مناسب
+import { Client } from "../views/Clients";
 
 interface VirtualClientListProps {
   clients: Client[];
@@ -9,7 +9,7 @@ interface VirtualClientListProps {
   height: number;
 }
 
-const ROW_HEIGHT = 72; // ارتفاع هر ردیف به پیکسل
+const ROW_HEIGHT = 72;
 
 export function VirtualClientList({ 
   clients, 
