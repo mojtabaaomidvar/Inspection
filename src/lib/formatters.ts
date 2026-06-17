@@ -1,6 +1,8 @@
 import { format } from "date-fns";
 
-export function formatCurrency(amount: number, currency: "IRR" | "USD" | "EUR" = "USD"): string {
+//export function formatCurrency(amount: number, currency: "IRR" | "USD" | "EUR" = "USD"): string {
+
+export function formatCurrency(amount: number | string, currency: string = "USD"): string {	
   if (currency === "IRR") {
     return new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 0 }).format(amount) + " ریال";
   }

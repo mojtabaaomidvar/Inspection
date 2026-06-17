@@ -1,4 +1,7 @@
-import { LayoutDashboard, Users, FileText, UserCheck, ClipboardCheck, Receipt, BarChart3, Map, ShieldCheck, Bell, Settings } from "lucide-react";
+//import { LayoutDashboard, Users, FileText, UserCheck, ClipboardCheck, Receipt, BarChart3, Map, ShieldCheck, Bell, Settings } from "lucide-react";
+
+
+import { Home, Users, FileText, BarChart3 } from "lucide-react";
 import { cn } from "../utils/cn";
 
 export type ViewKey = "dashboard" | "clients" | "contracts" | "inspectors" | "inspections" | "billing" | "reports" ;

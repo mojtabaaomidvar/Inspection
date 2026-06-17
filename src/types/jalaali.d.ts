@@ -5,7 +5,4 @@ declare module 'jalaali-js' {
   export function isLeapJalaaliYear(jy: number): boolean;
 }
 
-declare module 'moment-jalaali' {
-  import moment from 'moment';
-  export = moment;
-}
+declare module 'moment-jalaali';

@@ -1,4 +1,6 @@
-import { Card, CardHeader, Badge } from "../components/ui";
+//import { Card, CardHeader, Badge } from "../components/ui";
+
+import { Card, CardHeader } from "../components/ui";
 import { inspectors, inspectionsByDiscipline, inspectionsByMonth } from "../data/mockData";
 
 export function Reports() {

@@ -44,7 +44,7 @@ export interface Contract {
   total_value: number;
   invoiced: number;
   currency: string;
-  status: string;
+  status: "ACTIVE" | "PENDING" | "CLOSED" | string;
   type: "CONTRACT" | "WORK_ORDER";
   tariffs: number;
   department: string;
