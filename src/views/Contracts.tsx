@@ -13,15 +13,18 @@ import persian_fa from "react-date-object/locales/persian_fa";
 import jalaali from "jalaali-js";
 
 // ============ TYPES ============
-interface TariffLine {
+interface TariffLine {  
   id: string;
-  contract_id: string;
+  contract_id?: string;
   description: string;
   unit: string;
   rate: number;
-  total_quantity: number;
-  consumed_quantity: number;
-  invoiced: number;
+  currency?: string;
+  total?: number;
+  isLumpSum?: boolean;
+  total_quantity?: number;
+  consumed_quantity?: number;
+  invoiced?: number;
 }
 
 interface Client {
