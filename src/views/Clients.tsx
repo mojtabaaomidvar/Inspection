@@ -469,7 +469,7 @@ export function Clients() {
                     <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">National ID</div><div className="font-mono text-xs text-slate-900">{selectedClient.national_id || "—"}</div></div>
                     <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Registration No</div><div className="font-mono text-xs text-slate-900">{(selectedClient as any).registration_no || "—"}</div></div>
                     <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Economic Code</div><div className="font-mono text-xs text-slate-900">{(selectedClient as any).economic_code || "—"}</div></div>
-                    <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Company Type</div><div className="text-xs text-slate-900">{(selectedClient as any).company_type || "—"}</div></div>
+                    
                     <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Abbreviated Name</div><div className="text-xs text-slate-900">{(selectedClient as any).abbreviated_name || "—"}</div></div>
                     
                     {/* 🔑 Emails Dropdown - Float */}
