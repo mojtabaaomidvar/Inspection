@@ -19,17 +19,34 @@ const meta: Record<ViewKey, { title: string; subtitle: string }> = {
   reports: { title: "Reports & Analytics", subtitle: "Performance, quality, and financial intelligence" },
 };
 
-
 export default function App() {
   const [view, setView] = useState<ViewKey>("dashboard");
-  const m = meta[view]?? meta.dashboard;
+  // 🔑 State برای کنترل وضعیت سایدبار (باز/بسته)
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  
+  const m = meta[view] ?? meta.dashboard;
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
-      <Sidebar active={view} onSelect={setView} />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      {/* 🔑 سایدبار شناور با قابلیت باز/بسته شدن */}
+      <Sidebar 
+        active={view} 
+        onSelect={setView} 
+        isExpanded={sidebarExpanded}
+        onToggle={setSidebarExpanded}
+      />
+      
+      {/* 🔑 Main Content - عرض بر اساس وضعیت سایدبار */}
+      <main 
+        className={`flex flex-1 flex-col overflow-hidden transition-all duration-300 ${
+          sidebarExpanded ? "ml-0" : "ml-0"
+        }`}
+      >
+        {/* 🔑 Header با padding responsive */}
         <Header title={m.title} subtitle={m.subtitle} />
-        <div className="flex-1 overflow-auto p-6 lg:p-8">
+        
+        {/* 🔑 محتوای اصلی با padding responsive */}
+        <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 lg:p-8">
           {view === "dashboard" && <Dashboard />}
           {view === "clients" && <Clients />}
           {view === "contracts" && <Contracts />}
