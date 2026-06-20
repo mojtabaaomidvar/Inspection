@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar, ViewKey } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Dashboard } from "./views/Dashboard";
@@ -21,33 +21,55 @@ const meta: Record<ViewKey, { title: string; subtitle: string }> = {
 
 export default function App() {
   const [view, setView] = useState<ViewKey>("dashboard");
-  // 🔑 State برای کنترل باز/بسته بودن سایدبار
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  
+  //  State برای تم - ذخیره در localStorage
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    return saved === "dark";
+  });
+
+  // 🔑 اعمال تم به document
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDarkMode]);
 
   const m = meta[view] ?? meta.dashboard;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
-      {/* 🔑 Header: ثابت در بالا، کل عرض صفحه */}
+    <div className={`min-h-screen font-sans antialiased transition-colors duration-300 ${
+      isDarkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
+    }`}>
+      {/* Header */}
       <Header
         title={m.title}
         subtitle={m.subtitle}
         isSidebarExpanded={sidebarExpanded}
         onToggleSidebar={() => setSidebarExpanded(!sidebarExpanded)}
+        isDarkMode={isDarkMode}
+        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
       />
 
-      {/*  Sidebar: از زیر هدر شروع می‌شود */}
+      {/* Sidebar */}
       <Sidebar
         active={view}
         onSelect={setView}
         isExpanded={sidebarExpanded}
+        isDarkMode={isDarkMode}
       />
 
-      {/* 🔑 Main Content: با margin-top و margin-left داینامیک */}
+      {/* Main Content */}
       <main
         className="transition-all duration-300 ease-in-out pt-16"
         style={{
-          marginLeft: sidebarExpanded ? "16rem" : "5rem", // 16rem = w-64, 5rem = w-20
+          marginLeft: sidebarExpanded ? "16rem" : "5rem",
         }}
       >
         <div className="p-4 lg:p-6">
