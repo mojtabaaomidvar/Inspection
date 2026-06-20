@@ -718,6 +718,16 @@ const filteredContracts = useMemo(() => {
     return contractTariffs.filter((t) => t.contract_id === selectedContract.id);
   }, [selectedContract]);
 
+// 🔑 محاسبه مجموع کارهای انجام شده برای قرارداد انتخاب‌شده
+const totalPerformedWork = useMemo(() => {
+  if (!selectedContract) return 0;
+  return selectedTariffs.reduce((sum, t) => {
+    const rate = typeof t.rate === 'string' ? Number(t.rate.replace(/,/g, '')) || 0 : (t.rate || 0);
+    const consumed = t.consumed_quantity || 0;
+    return sum + (rate * consumed);
+  }, 0);
+}, [selectedContract, selectedTariffs]);
+
   useEffect(() => {
     if (isAddModalOpen) {
       const newContractNo = generateContractNo(addForm.type, contracts);
@@ -990,9 +1000,9 @@ const filteredContracts = useMemo(() => {
   }, [clientContractsList]);
 
   return (
-    <div className="grid grid-cols-12 gap-4 h-[calc(100vh-140px)] p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 lg:p-6 h-auto lg:h-[calc(100vh-140px)]">
       {/* LEFT PANEL */}
-      <div className="col-span-4 relative flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
+      <div className="ol-span-1 lg:col-span-4 relative flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none">
         <div className="relative z-10 border-b border-slate-100 px-4 py-4 bg-slate-50/50 space-y-4">
           <div className="flex items-center gap-3">
             <h3 className="text-sm font-semibold text-slate-900 shrink-0">Contracts</h3>
@@ -1023,7 +1033,7 @@ const filteredContracts = useMemo(() => {
             </div>
           </div>
 
-			<div className="flex gap-2 rounded-lg border border-slate-200 bg-white p-1.5 text-xs">
+			<div className="flex flex-col sm:flex-row gap-2 rounded-lg border border-slate-200 bg-white p-1.5 text-xs">
 			  
 			  <div className="flex-1 flex gap-1 rounded-md bg-slate-100 p-0.5">
 				{(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => {
@@ -1159,7 +1169,7 @@ const filteredContracts = useMemo(() => {
       </div>
 
       {/* RIGHT PANEL - همیشه نمایش داده می‌شود */}
-<div className="col-span-8 flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
+<div className="col-span-1 lg:col-span-8 flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
   {selectedContract ? (
     <>
       {/* Header وقتی قرارداد انتخاب شده */}
@@ -1168,7 +1178,7 @@ const filteredContracts = useMemo(() => {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Contract Details</h2>
           <Button variant="ghost" size="sm" onClick={() => setSelectedContract(null)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors">✕ Close Panel</Button>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-lg font-bold">📄</div>
             <div>
@@ -1221,23 +1231,29 @@ const filteredContracts = useMemo(() => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
+	  
         <div className="space-y-6">
           <div className="rounded-lg border border-slate-200 p-4 bg-slate-50/30">
             <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">📋 Contract Information</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+			
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4 text-sm">
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Internal Contract No.</div><div className="font-mono text-xs text-slate-900">{selectedContract.contract_no}</div></div>
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">External Contract No.</div><div className="font-mono text-xs text-slate-900">{selectedContract.external_contract_no || "—"}</div></div>
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1"></div><div className="text-xs text-slate-900"></div></div>
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Start Date</div><div className="text-xs text-slate-900">{selectedContract.start_date}</div></div>
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">End Date</div><div className="text-xs text-slate-900">{selectedContract.end_date}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Currency</div><div className="text-xs text-slate-900">{selectedContract.currency}</div></div>
               <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Total Value</div><div className="text-xs font-semibold text-emerald-600">{formatCurrency(selectedContract.total_value, selectedContract.currency)}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Invoiced</div><div className="text-xs font-semibold text-indigo-600">{formatCurrency(selectedTariffs.reduce((sum, t) => sum + ((t as any).invoiced || 0), 0))}</div></div>
-              <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Remaining</div><div className="text-xs font-semibold text-slate-900">{formatCurrency(selectedContract.total_value - selectedTariffs.reduce((sum, t) => sum + ((t as any).invoiced || 0), 0))}</div></div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4"> 
+              <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Total Performed Works</div><div className="text-xs font-semibold text-emerald-600">{formatCurrency(totalPerformedWork, selectedContract.currency)}</div></div>
+			  <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Invoiced</div><div className="text-xs font-semibold text-indigo-600">{formatCurrency(selectedTariffs.reduce((sum, t) => sum + ((t as any).invoiced || 0), 0))}</div></div>
+              <div><div className="text-[10px] uppercase text-slate-500 font-semibold mb-1">Not Invoiced</div>
+			  {(() => {
+				  const totalInvoiced = selectedTariffs.reduce((sum, t) => sum + ((t as any).invoiced || 0), 0);
+				  const notInvoiced = Math.max(0, totalPerformedWork - totalInvoiced);
+				  return (
+				<div className="text-xs font-semibold text-rose-600">{formatCurrency(notInvoiced, selectedContract.currency)}</div>);
+				})()}
+				</div></div></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4"> 
 			<Card className="p-4 bg-slate-50/50">
 			  <div className="text-xs text-slate-500">Total Performed Work (%)</div>
 			  {(() => {
@@ -1441,7 +1457,7 @@ const filteredContracts = useMemo(() => {
           </div>
         </div>
         
-        <h2 className="text-3xl font-bold text-slate-700 mb-3">OFFSHORE & ENERGY DEPARTMENT INSPECTION PLATFORM</h2>
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-700 mb-3">OFFSHORE & ENERGY DEPARTMENT INSPECTION PLATFORM</h2>
         <p className="text-base text-slate-500 max-w-md mx-auto leading-relaxed">
           Select a contract from the list to view details, tariffs, and progress information
         </p>

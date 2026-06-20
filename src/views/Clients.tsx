@@ -454,9 +454,9 @@ const totalInvoiced = useMemo(() => {
 
   // ============ RENDER ============
   return (
-    <div className="grid grid-cols-12 gap-4 h-[calc(100vh-140px)] p-6">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 lg:p-6 h-auto lg:h-[calc(100vh-140px)]">
       {/* LEFT PANEL */}
-      <div className="col-span-4 relative flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
+      <div className="col-span-1 lg:col-span-4 relative flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none">
         <div className="relative z-10 border-b border-slate-100 px-4 py-4 bg-slate-50/50 space-y-3">
           <div className="flex items-center gap-8">
             <h3 className="text-sm font-semibold text-slate-900 shrink-0">Clients</h3>
