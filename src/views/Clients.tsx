@@ -522,7 +522,7 @@ const totalInvoiced = useMemo(() => {
 
       {/* RIGHT PANEL - همیشه باز */}
 		{/* RIGHT PANEL - همیشه نمایش داده می‌شود */}
-		<div className="col-span-8 flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
+		<div className="col-span-1 lg:col-span-8 flex flex-col bg-white rounded-xl border border-slate-200/70 shadow-sm overflow-hidden transition-all duration-300 ease-in-out">
 		  {selectedClient ? (
 			<>
 			  {/* Header وقتی مشتری انتخاب شده */}
@@ -763,7 +763,7 @@ const totalInvoiced = useMemo(() => {
 				  )}
 				
 				  {/* Stats Cards */}
-				  <div className="grid grid-cols-4 gap-4">
+				  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
 					<div className="rounded-lg border border-slate-200 p-4"><div className="text-xs text-slate-500 mb-1">{summaryTitle}</div><div className="text-2xl font-bold text-slate-900">{dynamicContractCount}</div></div>
 					<div className="rounded-lg border border-slate-200 p-4"><div className="text-xs text-slate-500 mb-1">Total Value of Agreements</div><div className="text-2xl font-bold text-emerald-600">{formatCurrency(totalValue)}</div></div>
 					<div className="rounded-lg border border-slate-200 p-4"><div className="text-xs text-slate-500 mb-1">Invoiced</div><div className="text-2xl font-bold text-indigo-600">{formatCurrency(totalInvoiced)}</div></div>
