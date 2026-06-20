@@ -21,32 +21,36 @@ const meta: Record<ViewKey, { title: string; subtitle: string }> = {
 
 export default function App() {
   const [view, setView] = useState<ViewKey>("dashboard");
-  // 🔑 State برای کنترل وضعیت سایدبار (باز/بسته)
+  // 🔑 State برای کنترل باز/بسته بودن سایدبار
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  
+
   const m = meta[view] ?? meta.dashboard;
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
-      {/* 🔑 سایدبار شناور با قابلیت باز/بسته شدن */}
-      <Sidebar 
-        active={view} 
-        onSelect={setView} 
-        isExpanded={sidebarExpanded}
-        onToggle={setSidebarExpanded}
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+      {/* 🔑 Header: ثابت در بالا، کل عرض صفحه */}
+      <Header
+        title={m.title}
+        subtitle={m.subtitle}
+        isSidebarExpanded={sidebarExpanded}
+        onToggleSidebar={() => setSidebarExpanded(!sidebarExpanded)}
       />
-      
-      {/* 🔑 Main Content - عرض بر اساس وضعیت سایدبار */}
-      <main 
-        className={`flex flex-1 flex-col overflow-hidden transition-all duration-300 ${
-          sidebarExpanded ? "ml-0" : "ml-0"
-        }`}
+
+      {/*  Sidebar: از زیر هدر شروع می‌شود */}
+      <Sidebar
+        active={view}
+        onSelect={setView}
+        isExpanded={sidebarExpanded}
+      />
+
+      {/* 🔑 Main Content: با margin-top و margin-left داینامیک */}
+      <main
+        className="transition-all duration-300 ease-in-out pt-16"
+        style={{
+          marginLeft: sidebarExpanded ? "16rem" : "5rem", // 16rem = w-64, 5rem = w-20
+        }}
       >
-        {/* 🔑 Header با padding responsive */}
-        <Header title={m.title} subtitle={m.subtitle} />
-        
-        {/* 🔑 محتوای اصلی با padding responsive */}
-        <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 lg:p-8">
+        <div className="p-4 lg:p-6">
           {view === "dashboard" && <Dashboard />}
           {view === "clients" && <Clients />}
           {view === "contracts" && <Contracts />}
