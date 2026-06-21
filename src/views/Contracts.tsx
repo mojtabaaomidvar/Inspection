@@ -162,9 +162,53 @@ const calculateProgressFromTariffs = (contract: Contract): number => {
   return (totalPerformed / contract.total_value) * 100;
 };
 
+// 🔑 محاسبه درصد invoiced نسبت به کار انجام شده (نه کل قرارداد)
 const calculateInvoiceProgress = (contract: Contract): number => {
-  if (contract.total_value <= 0) return 0;
-  return (contract.invoiced / contract.total_value) * 100;
+  const tariffs = contractTariffs.filter((t) => t.contract_id === contract.id);
+  if (tariffs.length === 0) return 0;
+  
+  const totalInvoiced = tariffs.reduce((sum, t) => sum + (t.invoiced || 0), 0);
+  const performedWork = tariffs.reduce((sum, t) => {
+    const rate = typeof t.rate === 'string' ? parseNumberInput(t.rate) : (t.rate || 0);
+    const consumed = t.consumed_quantity || 0;
+    return sum + (rate * consumed);
+  }, 0);
+  
+  if (performedWork <= 0) return 0;
+  return (totalInvoiced / performedWork) * 100;
+};
+
+// محاسبه درصد روزهای گذشته از قرارداد
+const calculateDaysProgress = (contract: Contract): number => {
+  if (!contract.start_date || !contract.end_date) return 0;
+  
+  const [startJy, startJm, startJd] = contract.start_date.split('/').map(Number);
+  const [endJy, endJm, endJd] = contract.end_date.split('/').map(Number);
+  
+  const startG = jalaali.toGregorian(startJy, startJm, startJd);
+  const endG = jalaali.toGregorian(endJy, endJm, endJd);
+  
+  const startDate = new Date(startG.gy, startG.gm - 1, startG.gd);
+  const endDate = new Date(endG.gy, endG.gm - 1, endG.gd);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const totalDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+  const daysPassed = (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+  
+  if (totalDays <= 0) return 0;
+  if (daysPassed <= 0) return 0;
+  if (daysPassed >= totalDays) return 100;
+  
+  return (daysPassed / totalDays) * 100;
+};
+
+// رنگ پروگرس بار بر اساس درصد روزهای گذشته
+const getDaysProgressColor = (progress: number): string => {
+  if (progress >= 90) return "bg-rose-500";
+  if (progress >= 70) return "bg-amber-500";
+  if (progress >= 50) return "bg-yellow-500";
+  return "bg-emerald-500";
 };
 
 // ============ DATE CALCULATION HELPERS ============
@@ -1103,7 +1147,7 @@ export function Contracts() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge tone={contract.type === "CONTRACT" ? "indigo" : "amber"}>
-                          {contract.type === "CONTRACT" ? "Contract" : "Work Order"}
+                          {contract.type === "CONTRACT" ? "📄 Contract" : "📦 Work Order"}
                         </Badge>
                         <span className="font-mono text-xs text-secondary">{contract.contract_no}</span>
                       </div>
@@ -1130,36 +1174,54 @@ export function Contracts() {
                     <span className="text-secondary" dir="rtl">{contract.start_date} → {contract.end_date}</span>
                     <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
                   </div>
-                  <div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
-                    {(() => {
-                      const progress = calculateProgressFromTariffs(contract);
-                      return (
-                        <div
-                          className={`h-full rounded-full ${getProgressColor(progress)}`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        />
-                      );
-                    })()}
-                  </div>
+					{/* 🔑 پروگرس بار دوم: درصد روزهای گذشته */}
+					<div className={`flex items-center justify-between text-[10px] mt-3 mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+					  <span>Time Elapsed</span>
+					  {(() => {
+						const daysProgress = calculateDaysProgress(contract);
+						return (
+						  <span className={`font-semibold ${daysProgress >= 90 ? "text-rose-600" : daysProgress >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
+							{daysProgress.toFixed(0)}%
+						  </span>
+						);
+					  })()}
+					</div>
+					<div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
+					  {(() => {
+						const daysProgress = calculateDaysProgress(contract);
+						return (
+						  <div
+							className={`h-full rounded-full ${getDaysProgressColor(daysProgress)}`}
+							style={{ width: `${Math.min(daysProgress, 100)}%` }}
+						  />
+						);
+					  })()}
+					</div>
                 </div>
               );
             })
           )}
         </div>
 
-        <div className={`absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t pointer-events-none z-10 ${
-          isDark ? "from-card via-card/90" : "from-card via-card/90"
-        } to-transparent`} />
-        <div className="absolute bottom-6 left-0 right-0 px-6 z-20">
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleAddClick}
-            className="w-full justify-center gap-2 shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all duration-300"
-          >
-            <span>➕</span> Add New Contract
-          </Button>
-        </div>
+        <div className={`absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t pointer-events-none z-10 ${
+		  isDark 
+			? "from-slate-900 via-slate-900/95 to-slate-900/0" 
+			: "from-white via-white/95 to-white/0"
+		}`} />
+		<div className="absolute bottom-5 left-0 right-0 px-6 z-20">
+		  <Button
+			variant="primary"
+			size="md"
+			onClick={handleAddClick}
+			className={`w-full justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
+			  isDark 
+				? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
+				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
+			}`}
+		  >
+			<span>➕</span> Add New Agreement
+		  </Button>
+		</div>
       </div>
 
       {/* RIGHT PANEL */}
@@ -1188,11 +1250,11 @@ export function Contracts() {
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-lg font-bold">📄</div>
                   <div>
-                    <h3 className="text-xl font-bold text-primary">{selectedContract.contract_title}</h3>
+                    <h3 className="text-xl font-bold text-primary truncate min-w-0 max-w-[450px]" title={selectedContract.contract_title}>{selectedContract.contract_title}</h3>
                     <p className="text-sm text-secondary font-mono">{selectedContract.contract_no} • {selectedContract.client_name}</p>
                     <div className="flex items-center gap-2 mt-1.5">
                       <Badge tone={selectedContract.type === "CONTRACT" ? "indigo" : "amber"}>
-                        {selectedContract.type === "CONTRACT" ? "Contract" : "Work Order"}
+                        {selectedContract.type === "CONTRACT" ? "📄 Contract" : "📦 Work Order"}
                       </Badge>
                       {(() => {
                         const financialStatus = getContractFinancialStatus(selectedContract);
@@ -1228,8 +1290,7 @@ export function Contracts() {
                   </div>
                 </div>
                 <Button variant="outline" size="md" onClick={handleEditClick} className="gap-2 shadow-sm">
-                  <span>✏️</span> Edit {selectedContract.type === "CONTRACT" ? "Contract" : "Work Order"}
-                </Button>
+                  <span>✏️</span> Edit</Button>
               </div>
             </div>
 
@@ -1307,7 +1368,7 @@ export function Contracts() {
                   <Card className={`p-4 bg-muted/50`}>
                     <div className="text-xs text-secondary">Total Invoiced (%)</div>
                     {(() => {
-                      const spent = calculateBudgetSpent(selectedContract.total_value, selectedContract.invoiced);
+                      const spent = calculateInvoiceProgress(selectedContract);
                       return (
                         <>
                           <div className={`text-lg font-bold ${getProgressTextColor(spent)}`}>

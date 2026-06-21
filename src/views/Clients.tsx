@@ -60,10 +60,18 @@ const calculateBudgetSpent = (totalValue: number, invoiced: number): number => {
 };
 
 const calculateInvoiceProgress = (contract: any): number => {
-  if (contract.total_value <= 0) return 0;
-  if (!contract.tariffLines || contract.tariffLines.length === 0) return 0;
-  const totalInvoiced = contract.tariffLines.reduce((sum: number, t: any) => sum + (t.invoiced || 0), 0);
-  return (totalInvoiced / contract.total_value) * 100;
+  const tariffs = contractTariffs.filter((t) => t.contract_id === contract.id);
+  if (tariffs.length === 0) return 0;
+  
+  const totalInvoiced = tariffs.reduce((sum, t) => sum + (t.invoiced || 0), 0);
+  const performedWork = tariffs.reduce((sum, t) => {
+    const rate = typeof t.rate === 'string' ? parseNumberInput(t.rate) : (t.rate || 0);
+    const consumed = t.consumed_quantity || 0;
+    return sum + (rate * consumed);
+  }, 0);
+  
+  if (performedWork <= 0) return 0;
+  return (totalInvoiced / performedWork) * 100;
 };
 
 // ============ UNINVOICED WORK CALCULATION ============
@@ -546,14 +554,25 @@ export function Clients() {
           )}
         </div>
 
-        <div className={`absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t pointer-events-none z-10 ${
-          isDark ? "from-slate-900 via-slate-900/90" : "from-white via-white/90"
-        } to-transparent`} />
-        <div className="absolute bottom-6 left-0 right-0 px-6 z-20">
-          <Button variant="primary" size="md" onClick={handleAddClick} className="w-full justify-center gap-2 shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all duration-300">
-            <span>➕</span> Add New Client
-          </Button>
-        </div>
+        <div className={`absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t pointer-events-none z-10 ${
+		  isDark 
+			? "from-slate-900 via-slate-900/95 to-slate-900/0" 
+			: "from-white via-white/95 to-white/0"
+		}`} />
+		<div className="absolute bottom-5 left-0 right-0 px-6 z-20">
+		  <Button 
+			variant="primary" 
+			size="md" 
+			onClick={handleAddClick} 
+			className={`w-full justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
+			  isDark 
+				? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
+				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
+			}`}
+		  >
+			<span>➕</span> Add New Client
+		  </Button>
+		</div>
       </div>
 
       {/* RIGHT PANEL */}
@@ -594,7 +613,7 @@ export function Clients() {
               <div className="space-y-6">
                 {selectedClient.type === "LEGAL" && (
                   <div className={`rounded-lg border p-4 ${
-                    isDark ? "border-slate-300 bg-slate-800/30" : "border-slate-200 bg-slate-50/30"
+                    isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200 bg-slate-50/30"
                   }`}>
                     <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>🏢 Company Information</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -762,7 +781,7 @@ export function Clients() {
 
                 {selectedClient.type === "INDIVIDUAL" && (
                   <div className={`rounded-lg border p-4 ${
-                    isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/30"
+                    isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200 bg-slate-50/30"
                   }`}>
                     <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>👤 Personal Information</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
@@ -841,19 +860,19 @@ export function Clients() {
                 )}
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
-                  <div className={`rounded-lg border p-4 ${isDark ? "border-slate-300 bg-slate-800/30" : "border-slate-200"}`}>
+                  <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
                     <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{summaryTitle}</div>
                     <div className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{dynamicContractCount}</div>
                   </div>
-                 <div className={`rounded-lg border p-4 ${isDark ? "border-slate-300 bg-slate-800/30" : "border-slate-200"}`}>
+                 <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
 				  <div className="text-xs text-secondary mb-1">Total Value of Agreements</div> 
 				  <div className="text-2xl font-bold text-accent-emerald">{formatCurrency(totalValue)}</div> 
 				</div>
-				<div className={`rounded-lg border p-4 ${isDark ? "border-slate-300 bg-slate-800/30" : "border-slate-200"}`}> 
+				<div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}> 
 				  <div className="text-xs text-secondary mb-1">Invoiced</div> 
 				  <div className="text-2xl font-bold text-accent-indigo">{formatCurrency(totalInvoiced)}</div> 
 				</div>
-                  <div className={`rounded-lg border p-4 ${isDark ? "border-slate-300 bg-slate-800/30" : "border-slate-200"}`}>
+                  <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
                     <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Not Invoiced Works</div>
                     <div className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{formatCurrency(totalUninvoicedWork)}</div>
                   </div>
@@ -863,7 +882,7 @@ export function Clients() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Agreements</h3>
                     <div className={`flex gap-1 rounded-lg border p-0.5 text-xs ${
-                      isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-slate-50"
+                      isDark ? "border-slate-600 bg-slate-800" : "border-slate-200 bg-slate-50"
                     }`}>
                       {(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => (
                         <button
