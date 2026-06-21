@@ -5,6 +5,7 @@ echo ========================================
 echo.
 
 echo [1/4] Adding files...
+git rm -r --cached .
 git add .
 
 echo [2/4] Committing changes...
