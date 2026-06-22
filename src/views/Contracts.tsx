@@ -903,46 +903,49 @@ export function Contracts() {
     exportToExcel(dataToExport, `${filterName}_Contracts_${today}`, "Contracts");
   };
 
-  const handleAddClick = () => {
-    const contractNo = generateContractNo("CONTRACT", contracts);
-    setAddForm({
-      contract_no: contractNo,
-      external_contract_no: "",
-      source_type: "LETTER",
-      source_ref: "",
-      source_file: "",
-      source_file_object: null,
-      source_letter_date: "",
-      source_letter_image: "",
-      source_letter_image_object: null,
-      source_letter_image_preview: "",
-      source_email_from: "",
-      source_email_date: new Date().toISOString().split("T")[0],
-      client_id: "",
-      contract_title: "",
-      start_date: "",
-      end_date: "",
-      total_value: 0,
-      currency: "IRR",
-      status: "ACTIVE",
-      type: "CONTRACT",
-      contract_count: 1,
-      description: "",
-      tariffs: [
-        {
-          id: "1",
-          description: "",
-          unit: "MAN_DAY",
-          rate: "",
-          currency: "IRR",
-          total: 0,
-          isLumpSum: false,
-        },
-      ],
-    });
-    setAddErrors({});
-    setIsAddModalOpen(true);
-  };
+const handleAddClick = () => {
+  // 🔑 نوع قرارداد بر اساس فیلتر انتخابی تعیین میشه
+  const newType: "CONTRACT" | "WORK_ORDER" = typeFilter === "WORK_ORDER" ? "WORK_ORDER" : "CONTRACT";
+  const contractNo = generateContractNo(newType, contracts);
+  
+  setAddForm({
+    contract_no: contractNo,
+    external_contract_no: "",
+    source_type: "LETTER",
+    source_ref: "",
+    source_file: "",
+    source_file_object: null,
+    source_letter_date: "",
+    source_letter_image: "",
+    source_letter_image_object: null,
+    source_letter_image_preview: "",
+    source_email_from: "",
+    source_email_date: new Date().toISOString().split("T")[0],
+    client_id: "",
+    contract_title: "",
+    start_date: "",
+    end_date: "",
+    total_value: 0,
+    currency: "IRR",
+    status: "ACTIVE",
+    type: newType,  // 🔑 نوع داینامیک بر اساس فیلتر
+    contract_count: 1,
+    description: "",
+    tariffs: [
+      {
+        id: "1",
+        description: "",
+        unit: "MAN_DAY",
+        rate: "",
+        currency: "IRR",
+        total: 0,
+        isLumpSum: false,
+      },
+    ],
+  });
+  setAddErrors({});
+  setIsAddModalOpen(true);
+};
 
   const validateAddForm = () => {
     const errors: any = {};
@@ -1317,7 +1320,7 @@ export function Contracts() {
 			? "from-slate-900 via-slate-900/95 to-slate-900/0" 
 			: "from-white via-white/95 to-white/0"
 		}`} />
-		<div className="absolute bottom-5 left-0 right-0 px-6 z-20">
+		<div className="absolute bottom-5 left-0 right-0 px-4 z-20 flex gap-2">
 		  <Button
 			variant="primary"
 			size="md"
@@ -1328,7 +1331,23 @@ export function Contracts() {
 				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
 			}`}
 		  >
-			<span>➕</span> Add New Agreement
+			<span>➕</span> 
+			{typeFilter === "ALL" ? "Add New Agreement" : 
+			 typeFilter === "CONTRACT" ? "Add New Contract" : 
+			 "Add New Work Order"}
+		  </Button>
+		  <Button
+			variant="secondary"
+			size="md"
+			onClick={handleExportToExcel}
+			className={`transition-all duration-300 hover:-translate-y-0.5 ${
+			  isDark 
+				? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
+				: "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
+			}`}
+			title="Export to Excel"
+		  >
+			📥
 		  </Button>
 		</div>
       </div>
@@ -1695,35 +1714,44 @@ export function Contracts() {
       </div>
 
       {/* ADD CONTRACT MODAL */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Contract" size="lg">
+      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Agreement" size="lg">
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-primary">Type *</label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleTypeChange("CONTRACT")}
-                className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  addForm.type === "CONTRACT"
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
-                }`}
-              >
-                📄 Contract
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTypeChange("WORK_ORDER")}
-                className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                  addForm.type === "WORK_ORDER"
-                    ? "bg-amber-600 text-white shadow-md"
-                    : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
-                }`}
-              >
-                📦 Work Order
-              </button>
-            </div>
-          </div>
+			  <label className="mb-1.5 block text-xs font-semibold text-primary">
+				Type *
+				{typeFilter !== "ALL" && (
+				  <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+					🔒 Locked to {typeFilter === "CONTRACT" ? "Contract" : "Work Order"}
+				  </span>
+				)}
+			  </label>
+			  <div className="flex gap-2">
+				<button
+				  type="button"
+				  onClick={() => typeFilter === "ALL" && handleTypeChange("CONTRACT")}
+				  disabled={typeFilter !== "ALL"}
+				  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+					addForm.type === "CONTRACT"
+					  ? "bg-indigo-600 text-white shadow-md"
+					  : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
+				  } ${typeFilter !== "ALL" && addForm.type !== "CONTRACT" ? "opacity-40 cursor-not-allowed" : ""}`}
+				>
+				  📄 Contract
+				</button>
+				<button
+				  type="button"
+				  onClick={() => typeFilter === "ALL" && handleTypeChange("WORK_ORDER")}
+				  disabled={typeFilter !== "ALL"}
+				  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+					addForm.type === "WORK_ORDER"
+					  ? "bg-amber-600 text-white shadow-md"
+					  : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
+				  } ${typeFilter !== "ALL" && addForm.type !== "WORK_ORDER" ? "opacity-40 cursor-not-allowed" : ""}`}
+				>
+				  📦 Work Order
+				</button>
+			  </div>
+			</div>
 
           <div className={`rounded-lg border border-theme bg-muted p-3`}>
             <label className="mb-1.5 block text-xs font-semibold text-primary">Internal Contract No (ICS)</label>
