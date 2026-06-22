@@ -20,33 +20,41 @@
   --border-color: #e2e8f0;
   --border-sidebar: rgba(30, 41, 59, 0.6);
   --border-input: #e2e8f0;
+  --border-hover: #94a3b8;
   
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-3d: 0 10px 30px -10px rgba(0, 0, 0, 0.15), 0 4px 10px -4px rgba(0, 0, 0, 0.1);
+  --shadow-3d-hover: 0 20px 40px -12px rgba(0, 0, 0, 0.2), 0 8px 16px -6px rgba(0, 0, 0, 0.12);
+  --shadow-inset-light: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .dark {
-  /* تم تاریک */
-  --bg-app: #1e293b;
-  --bg-card: #334155;
-  --bg-header: #1e293b;
-  --bg-sidebar: #1e293b;
-  --bg-input: #475569;
-  --bg-hover: #475569;
-  --bg-muted: #334155;
+  /* تم تاریک روشن‌تر */
+  --bg-app: #2d3748;        /* slate-700 - روشن‌تر از قبل */
+  --bg-card: #4a5568;       /* slate-600 - روشن‌تر */
+  --bg-header: #2d3748;     /* slate-700 */
+  --bg-sidebar: #2d3748;    /* slate-700 */
+  --bg-input: #5a6577;      /* روشن‌تر */
+  --bg-hover: #5a6577;      /* روشن‌تر */
+  --bg-muted: #4a5568;      /* slate-600 */
   
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-sidebar: #e2e8f0;
+  --text-primary: #f7fafc;  /* slate-50 - روشن‌تر */
+  --text-secondary: #cbd5e0; /* slate-300 - روشن‌تر */
+  --text-muted: #a0aec0;    /* slate-400 - روشن‌تر */
+  --text-sidebar: #e2e8f0;  /* slate-200 */
   --text-sidebar-active: #ffffff;
   
-  --border-color: #475569;
-  --border-sidebar: rgba(71, 85, 105, 0.6);
-  --border-input: #475569;
+  --border-color: #718096;  /* slate-500 - واضح‌تر */
+  --border-sidebar: rgba(113, 128, 150, 0.6);
+  --border-input: #718096;
+  --border-hover: #a0aec0;
   
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --shadow-3d: 0 10px 30px -10px rgba(0, 0, 0, 0.4), 0 4px 10px -4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-3d-hover: 0 20px 40px -12px rgba(0, 0, 0, 0.5), 0 8px 16px -6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --shadow-inset-light: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* ============ UTILITY CLASSES ============ */
@@ -121,7 +129,7 @@ body {
 }
 
 .input-themed:hover {
-  border-color: var(--border-hover, #94a3b8);
+  border-color: var(--border-hover);
 }
 
 .input-themed:focus {
@@ -145,28 +153,28 @@ body {
   color: var(--text-primary);
 }
 .dark .text-accent-indigo {
-  color: #818cf8; /* indigo-400 - روشن‌تر */
+  color: #818cf8;
 }
 
 .text-accent-emerald {
-  color: #059669; /* emerald-600 */
+  color: #059669;
 }
 .dark .text-accent-emerald {
-  color: #34d399; /* emerald-400 - روشن‌تر */
+  color: #34d399;
 }
 
 .text-accent-rose {
-  color: #e11d48; /* rose-600 */
+  color: #e11d48;
 }
 .dark .text-accent-rose {
-  color: #fb7185; /* rose-400 - روشن‌تر */
+  color: #fb7185;
 }
 
 .text-accent-amber {
-  color: #d97706; /* amber-600 */
+  color: #d97706;
 }
 .dark .text-accent-amber {
-  color: #fbbf24; /* amber-400 - روشن‌تر */
+  color: #fbbf24;
 }
 
 /* ============ BORDER STRONGER ============ */
@@ -175,5 +183,190 @@ body {
 }
 
 .dark .border-strong {
-  border-color: #475569; /* slate-600 - واضح‌تر */
+  border-color: #475569;
+}
+
+/* ============ 3D EFFECTS - افکت‌های سه‌بعدی ============ */
+
+/* پنل سه‌بعدی - برای LEFT/RIGHT PANEL */
+.panel-3d {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-3d), var(--shadow-inset-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.panel-3d::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.dark .panel-3d::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+}
+
+/* کارت سه‌بعدی */
+.card-3d {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-3d), var(--shadow-inset-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.card-3d:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-3d-hover), var(--shadow-inset-light);
+}
+
+/* دکمه سه‌بعدی */
+.btn-3d {
+  position: relative;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-3d:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.2),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-3d:active {
+  transform: translateY(0);
+  box-shadow: 
+    0 2px 4px -1px rgba(0, 0, 0, 0.1),
+    inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dark .btn-3d {
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 2px 4px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark .btn-3d:hover {
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.5),
+    0 4px 6px -4px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* افکت بلند شدن */
+.hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-3d-hover);
+}
+
+/* افکت فشرده شدن */
+.hover-press {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-press:active {
+  transform: scale(0.97);
+}
+
+/* افکت شیشه‌ای */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* افکت درخشش ملایم */
+.glow {
+  position: relative;
+}
+
+.glow::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.3) 0%,
+    rgba(139, 92, 246, 0.2) 50%,
+    rgba(236, 72, 153, 0.3) 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+  filter: blur(12px);
+}
+
+.glow:hover::after {
+  opacity: 1;
+}
+
+/* کانتینر پرسپکتیو */
+.perspective-container {
+  perspective: 1000px;
+}
+
+/* افکت چرخش ملایم */
+.tilt-hover {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.tilt-hover:hover {
+  transform: rotateX(2deg) rotateY(-2deg) translateY(-4px);
+}
+
+/* افکت عمق برای آیکون‌ها */
+.depth-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+  transition: all 0.2s ease;
+}
+
+.depth-icon:hover {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  transform: scale(1.1);
+}
+
+.dark .depth-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.dark .depth-icon:hover {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
 }

@@ -12,6 +12,7 @@ import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
 import jalaali from "jalaali-js";
 import { useTheme } from "../contexts/ThemeContext";
+import { usePersistedState } from '../hooks/usePersistedState';
 
 // ============ TYPES ============
 interface TariffLine {
@@ -250,14 +251,74 @@ const calculateBudgetSpent = (totalValue: number, invoiced: number): number => {
 };
 
 // ============ FINANCIAL STATUS HELPERS ============
-const getContractFinancialStatus = (contract: Contract): "completed" | "needs_review" | "active" => {
+const getContractFinancialStatus = (contract: Contract): "completed" | "needs_review" | "active" | "not_started" => {
   const daysLeft = calculateDaysLeft(contract.end_date);
+  const daysUntilStart = getDaysUntilStart(contract.start_date);
+  const notStarted = daysUntilStart > 0;
   const isExpired = daysLeft < 0;
   const isFullyInvoiced = contract.invoiced >= contract.total_value;
+  
   if (contract.status === "COMPLETED") return "completed";
+  if (notStarted) return "not_started";
   if (isExpired && isFullyInvoiced) return "completed";
   if (isExpired && !isFullyInvoiced) return "needs_review";
   return "active";
+};
+
+const getNeedsReviewType = (contract: Contract): {
+  type: "value_review" | "invoice_review" | "time_review" | "none";
+  message: string;
+  details: string;
+} => {
+  const daysLeft = calculateDaysLeft(contract.end_date);
+  const isExpired = daysLeft < 0;
+  
+  // محاسبه کار انجام شده
+  const tariffs = contractTariffs.filter((t) => t.contract_id === contract.id);
+  const performedWork = tariffs.reduce((sum, t) => {
+    const rate = typeof t.rate === 'string' ? parseNumberInput(t.rate) : (t.rate || 0);
+    const consumed = t.consumed_quantity || 0;
+    return sum + (rate * consumed);
+  }, 0);
+  
+  // محاسبه کل صورتحساب‌ها
+  const totalInvoiced = tariffs.reduce((sum, t) => sum + (t.invoiced || 0), 0);
+  const invoicePercentage = performedWork > 0 ? (totalInvoiced / performedWork) * 100 : 0;
+  
+  // 🔴 ۱. Total Agreement Value Review
+  if (performedWork > contract.total_value && !isExpired) {
+    const overAmount = performedWork - contract.total_value;
+    return {
+      type: "value_review",
+      message: "Total Agreement Value Review",
+      details: `Performed work (${formatCurrency(performedWork, contract.currency)}) exceeds total contract value (${formatCurrency(contract.total_value, contract.currency)}) by ${formatCurrency(overAmount, contract.currency)}`
+    };
+  }
+  
+  // 🔴 ۲. Invoice Review
+  if (invoicePercentage > 110) {
+    return {
+      type: "invoice_review",
+      message: "Invoice Review Required",
+      details: `Invoiced amount (${formatCurrency(totalInvoiced, contract.currency)}) is ${invoicePercentage.toFixed(1)}% of performed work (${formatCurrency(performedWork, contract.currency)}). This exceeds the 110% threshold.`
+    };
+  }
+  
+  // 🟡 ۳. Time Review (تاریخ تموم شده ولی مشکل مالی نداره)
+  if (isExpired && contract.invoiced <= contract.total_value && invoicePercentage <= 110) {
+    const daysOverdue = Math.abs(daysLeft);
+    return {
+      type: "time_review",
+      message: "Time Review Required",
+      details: `Contract expired ${daysOverdue} days ago. Please review and decide whether to extend or complete the contract.`
+    };
+  }
+  
+  return {
+    type: "none",
+    message: "",
+    details: ""
+  };
 };
 
 const getInvoicedPercentage = (contract: Contract): number => {
@@ -619,12 +680,12 @@ function TariffEditor({ tariffs, onChange, error, showTotals = true }: TariffEdi
 export function Contracts() {
   const { isDark } = useTheme();
 
-  const [contracts, setContracts] = useState<Contract[]>(initialContracts);
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [contracts, setContracts] = usePersistedState<Contract[]>('ics_contracts', initialContracts);
+  const [clients, setClients] = usePersistedState<Client[]>('ics_clients', initialClients);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [typeFilter, setTypeFilter] = useState<"ALL" | "CONTRACT" | "WORK_ORDER">("ALL");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "COMPLETED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "NOT_STARTED" | "NEEDS_REVIEW" | "COMPLETED">("ALL");
   const [sortBy, setSortBy] = useState<"date" | "value" | "status">("date");
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
@@ -736,21 +797,35 @@ export function Contracts() {
 
   // ============ 3. FINAL FILTERED ============
   const filteredContracts = useMemo(() => {
-    let result = baseContracts.filter((contract) => {
-      const matchesType = typeFilter === "ALL" || contract.type === typeFilter;
-      const matchesStatus = statusFilter === "ALL" || contract.status === statusFilter;
-      return matchesType && matchesStatus;
-    });
-    return result.sort((a, b) => {
-      if (sortBy === "date") return b.start_date.localeCompare(a.start_date);
-      if (sortBy === "value") return b.total_value - a.total_value;
-      if (sortBy === "status") {
-        const order: Record<string, number> = { ACTIVE: 1, COMPLETED: 2 };
-        return (order[a.status] || 99) - (order[b.status] || 99);
-      }
-      return 0;
-    });
-  }, [baseContracts, typeFilter, statusFilter, sortBy]);
+  let result = baseContracts.filter((contract) => {
+    const matchesType = typeFilter === "ALL" || contract.type === typeFilter;
+    
+    // 🔑 فیلتر بر اساس وضعیت واقعی
+    const financialStatus = getContractFinancialStatus(contract);
+    let matchesStatus = true;
+    if (statusFilter === "ACTIVE") matchesStatus = financialStatus === "active";
+    else if (statusFilter === "NOT_STARTED") matchesStatus = financialStatus === "not_started";
+    else if (statusFilter === "NEEDS_REVIEW") matchesStatus = financialStatus === "needs_review";
+    else if (statusFilter === "COMPLETED") matchesStatus = financialStatus === "completed";
+    
+    return matchesType && matchesStatus;
+  });
+  
+  return result.sort((a, b) => {
+    if (sortBy === "date") return b.start_date.localeCompare(a.start_date);
+    if (sortBy === "value") return b.total_value - a.total_value;
+    if (sortBy === "status") {
+      const order: Record<string, number> = { 
+        not_started: 1, 
+        active: 2, 
+        needs_review: 3, 
+        completed: 4 
+      };
+      return (order[getContractFinancialStatus(a)] || 99) - (order[getContractFinancialStatus(b)] || 99);
+    }
+    return 0;
+  });
+}, [baseContracts, typeFilter, statusFilter, sortBy]);
 
   const selectedTariffs = useMemo(() => {
     if (!selectedContract) return [];
@@ -1033,95 +1108,103 @@ export function Contracts() {
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 lg:p-6 h-auto lg:h-[calc(100vh-140px)]`}>
       {/* LEFT PANEL */}
-      <div className={`col-span-1 lg:col-span-4 relative flex flex-col rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none ${
+      <div className={`col-span-1 lg:col-span-4 relative flex flex-col rounded-xl panel-3d overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none ${
         isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200/70"
       }`}>
         <div className={`relative z-10 border-b px-4 py-4 space-y-3 ${
           isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/50"
         }`}>
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-semibold text-primary shrink-0">Contracts</h3>
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">🔍</span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by contract no, client, title..."
-                className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-primary">✕</button>
-              )}
-            </div>
-          </div>
+          <div className="flex items-center gap-3"> 
+			  <div className="relative flex-1">
+				<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">🔍</span>
+				<input
+				  type="text"
+				  value={searchQuery}
+				  onChange={(e) => setSearchQuery(e.target.value)}
+				  placeholder="Search by contract no, client, title..."
+				  className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
+				/>
+				{searchQuery && (
+				  <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-primary">✕</button>
+				)}
+			  </div>
+			  {/* 🔑 دکمه Sort کنار سرچ */}
+			  <div className="relative">
+				<select
+				  value={sortBy}
+				  onChange={(e) => setSortBy(e.target.value as "date" | "value" | "status")}
+				  className="appearance-none text-xs rounded-md pl-2 pr-6 py-2 font-medium cursor-pointer input-themed"
+				>
+				  <option value="date">Latest First</option>
+				  <option value="value">Highest Value</option>
+				  <option value="status">By Status</option>
+				</select>
+				<span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
+			  </div>
+			</div>
 
-          <div className={`flex items-center justify-end gap-3 pt-2 border-t border-theme`}>
-            <Button variant="outline" size="sm" onClick={handleExportToExcel} className="shrink-0 gap-1.5 text-xs">📥 Export</Button>
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as "date" | "value" | "status")}
-                className="appearance-none text-xs rounded-md pl-2 pr-6 py-2 font-medium cursor-pointer input-themed"
-              >
-                <option value="date">Latest First</option>
-                <option value="value">Highest Value</option>
-                <option value="status">By Status</option>
-              </select>
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
-            </div>
-          </div>
+          {/* 🔑 ردیف فیلتر نوع قرارداد */}
+			<div className={`flex gap-1 rounded-lg border p-0.5 text-xs ${
+			  isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
+			}`}>
+			  {(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => {
+				const count = t === "ALL" ? contracts.length : t === "CONTRACT" ? contracts.filter(c => c.type === "CONTRACT").length : contracts.filter(c => c.type === "WORK_ORDER").length;
+				return (
+				  <button
+					key={t}
+					onClick={() => setTypeFilter(t)}
+					className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
+					  typeFilter === t
+						? (isDark 
+							? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500" 
+							: "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm")
+						: (isDark 
+							? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" 
+							: "text-slate-500 hover:text-slate-700 hover:bg-slate-50")
+					}`}
+				  >
+					{t === "ALL" ? `All (${count})` : t === "CONTRACT" ? `📄 (${count})` : `📦(${count})`}
+				  </button>
+				);
+			  })}
+			</div>
 
-          <div className={`flex gap-2 rounded-lg border p-1 text-xs ${
-            isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
-          }`}>
-            <div className="flex-1 flex gap-1 rounded-md filter-group-inner p-0.5">
-              {(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => {
-                const count = t === "ALL" ? contracts.length : t === "CONTRACT" ? contracts.filter(c => c.type === "CONTRACT").length : contracts.filter(c => c.type === "WORK_ORDER").length;
-                return (
-                  <button
-                    key={t}
-                    onClick={() => setTypeFilter(t)}
-                    className={`flex-1 rounded px-1 py-1 font-medium transition-all whitespace-nowrap ${
-                      typeFilter === t
-                        ? (isDark ? "bg-card text-indigo-300 shadow-sm" : "bg-card text-indigo-700 shadow-sm")
-                        : (isDark ? "text-secondary hover:text-primary" : "text-secondary hover:text-slate-700")
-                    }`}
-                  >
-                    {t === "ALL" ? `All (${count})` : t === "CONTRACT" ? `📄 (${count})` : `📦(${count})`}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className={`h-6 w-px shrink-0 ${isDark ? "bg-slate-700" : "bg-slate-200"}`} />
-
-            <div className="flex-1 flex gap-1 rounded-md filter-group-inner p-0.5">
-              {(["ALL", "ACTIVE", "COMPLETED"] as const).map((t) => {
-                const baseContractsFiltered = typeFilter === "ALL"
-                  ? contracts
-                  : contracts.filter(c => c.type === typeFilter);
-                const count = t === "ALL"
-                  ? baseContractsFiltered.length
-                  : t === "ACTIVE"
-                    ? baseContractsFiltered.filter(c => c.status === "ACTIVE").length
-                    : baseContractsFiltered.filter(c => c.status === "COMPLETED").length;
-                return (
-                  <button
-                    key={t}
-                    onClick={() => setStatusFilter(t)}
-                    className={`flex-1 rounded px-1 py-1 font-medium transition-all whitespace-nowrap ${
-                      statusFilter === t
-                        ? (isDark ? "bg-card text-emerald-300 shadow-sm" : "bg-card text-emerald-700 shadow-sm")
-                        : (isDark ? "text-secondary hover:text-primary" : "text-secondary hover:text-slate-700")
-                    }`}
-                  >
-                    {t === "ALL" ? `All (${count})` : t === "ACTIVE" ? `🟢 (${count})` : `⚫ (${count})`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+			{/* 🔑 ردیف دوم: فیلتر وضعیت قرارداد (۴ وضعیت) */}
+			<div className={`flex gap-1 rounded-lg border p-1 text-xs ${
+			  isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
+			}`}>
+			  {(["ALL", "ACTIVE", "NOT_STARTED", "NEEDS_REVIEW", "COMPLETED"] as const).map((t) => {
+				const baseFiltered = typeFilter === "ALL" ? contracts : contracts.filter(c => c.type === typeFilter);
+				let count = 0;
+				if (t === "ALL") count = baseFiltered.length;
+				else if (t === "ACTIVE") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "active").length;
+				else if (t === "NOT_STARTED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "not_started").length;
+				else if (t === "NEEDS_REVIEW") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "needs_review").length;
+				else if (t === "COMPLETED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "completed").length;
+				
+				return (
+				  <button
+					key={t}
+					onClick={() => setStatusFilter(t)}
+					className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
+					  statusFilter === t
+						? (isDark 
+							? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30 border border-emerald-500" 
+							: "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm")
+						: (isDark 
+							? "text-slate-300 hover:text-slate-100 hover:bg-slate-700" 
+							: "text-slate-600 hover:text-slate-900 hover:bg-slate-50")
+					}`}
+				  >
+					{t === "ALL" ? `All (${count})` : 
+					 t === "ACTIVE" ? `🟢 (${count})` : 
+					 t === "NOT_STARTED" ? `⏳ (${count})` : 
+					 t === "NEEDS_REVIEW" ? `⚠️ (${count})` : 
+					 `✓ (${count})`}
+				  </button>
+				);
+			  })}
+			</div>
         </div>
 
         <div className="flex-1 overflow-y-auto pb-24">
@@ -1155,48 +1238,74 @@ export function Contracts() {
                       <div className="text-xs text-secondary truncate">{contract.client_name}</div>
                     </div>
                     {(() => {
-                      const financialStatus = getContractFinancialStatus(contract);
-                      if (contract.status === "COMPLETED") {
-                        return <Badge tone="slate">✓ Completed</Badge>;
-                      }
-                      if (financialStatus === "needs_review") {
-                        return (
-                          <Badge tone="amber" className="gap-1">
-                            <span>⚠️</span>
-                            <span>Needs Review</span>
-                          </Badge>
-                        );
-                      }
-                      return <Badge tone="emerald">🟢 Active</Badge>;
-                    })()}
+					  const financialStatus = getContractFinancialStatus(contract);
+					  
+					  if (contract.status === "COMPLETED") {
+						return <Badge tone="slate">✓ Completed</Badge>;
+					  }
+					  
+					  if (financialStatus === "not_started") {
+						const daysUntilStart = getDaysUntilStart(contract.start_date);
+						return (
+						  <Badge tone="amber" className="gap-1">
+							<span>⏳</span>
+							<span>Not Started</span>
+						  </Badge>
+						);
+					  }
+					  
+					  if (financialStatus === "needs_review") {
+						return (
+						  <Badge tone="amber" className="gap-1">
+							<span>⚠️</span>
+							<span>Needs Review</span>
+						  </Badge>
+						);
+					  }
+					  
+					  return <Badge tone="emerald">🟢 Active</Badge>;
+					})()}
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-secondary" dir="rtl">{contract.start_date} → {contract.end_date}</span>
-                    <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
-                  </div>
-					{/* 🔑 پروگرس بار دوم: درصد روزهای گذشته */}
-					<div className={`flex items-center justify-between text-[10px] mt-3 mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-					  <span>Time Elapsed</span>
-					  {(() => {
-						const daysProgress = calculateDaysProgress(contract);
-						return (
-						  <span className={`font-semibold ${daysProgress >= 90 ? "text-rose-600" : daysProgress >= 70 ? "text-amber-600" : "text-emerald-600"}`}>
-							{daysProgress.toFixed(0)}%
-						  </span>
-						);
-					  })()}
+					  <span className="text-secondary" dir="rtl">{contract.start_date} → {contract.end_date}</span>
+					  <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
 					</div>
-					<div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
-					  {(() => {
-						const daysProgress = calculateDaysProgress(contract);
+
+					{(() => {
+					  const financialStatus = getContractFinancialStatus(contract);
+					  
+					  // اگه قرارداد هنوز شروع نشده
+					  if (financialStatus === "not_started") {
+						const daysUntilStart = getDaysUntilStart(contract.start_date);
 						return (
-						  <div
-							className={`h-full rounded-full ${getDaysProgressColor(daysProgress)}`}
-							style={{ width: `${Math.min(daysProgress, 100)}%` }}
-						  />
-						);
-					  })()}
-					</div>
+						  <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+							isDark ? "border-amber-700 bg-amber-900/20 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"
+						  }`}>
+							<div className="flex items-center gap-2">
+							  <span></span>
+							  <span className="font-medium">Starts in {daysUntilStart} days</span>
+							</div>
+							
+						  </div>
+						);	
+					  }
+					  
+					  // در غیر این صورت پروگرس بار معمولی
+					  return (
+						<div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
+						  {(() => {
+							const progress = calculateProgressFromTariffs(contract);
+							return (
+							  <div
+								className={`h-full rounded-full ${getProgressColor(progress)}`}
+								style={{ width: `${Math.min(progress, 100)}%` }}
+							  />
+							);
+						  })()}
+						</div>
+					  );
+					})()}
+					
                 </div>
               );
             })
@@ -1225,7 +1334,7 @@ export function Contracts() {
       </div>
 
       {/* RIGHT PANEL */}
-      <div className={`col-span-1 lg:col-span-8 flex flex-col rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ease-in-out ${
+      <div className={`col-span-1 lg:col-span-8 flex flex-col rounded-xl panel-3d overflow-hidden transition-all duration-300 ease-in-out ${
         isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200/70"
       }`}>
         {selectedContract ? (
@@ -1257,35 +1366,51 @@ export function Contracts() {
                         {selectedContract.type === "CONTRACT" ? "📄 Contract" : "📦 Work Order"}
                       </Badge>
                       {(() => {
-                        const financialStatus = getContractFinancialStatus(selectedContract);
-                        if (selectedContract.status === "COMPLETED") {
-                          return <Badge tone="slate">✓ Completed</Badge>;
-                        }
-                        if (financialStatus === "needs_review") {
-                          return (
-                            <div className="flex items-center gap-2">
-                              <Badge tone="amber" className="gap-1">
-                                <span>⚠️</span>
-                                <span>Needs Financial Review</span>
-                              </Badge>
-                              {userRole === "admin" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRequestComplete(selectedContract)}
-                                  className={`gap-1 text-xs ${
-                                    isDark ? "border-amber-600 text-amber-300 hover:bg-amber-900/30" : "border-amber-300 text-amber-700 hover:bg-amber-50"
-                                  }`}
-                                >
-                                  <span>✓</span>
-                                  <span>Mark as Completed</span>
-                                </Button>
-                              )}
-                            </div>
-                          );
-                        }
-                        return <Badge tone="emerald">🟢 Active</Badge>;
-                      })()}
+  const financialStatus = getContractFinancialStatus(selectedContract);
+  
+  if (selectedContract.status === "COMPLETED") {
+    return <Badge tone="slate">✓ Completed</Badge>;
+  }
+  
+  if (financialStatus === "not_started") {
+    const daysUntilStart = getDaysUntilStart(selectedContract.start_date);
+    return (
+      <Badge tone="amber" className="gap-1">
+        <span>⏳</span>
+        <span>Not Started ({daysUntilStart}d)</span>
+      </Badge>
+    );
+  }
+  
+  if (financialStatus === "needs_review") {
+    const reviewType = getNeedsReviewType(selectedContract);
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Badge tone="amber" className="gap-1">
+            <span>⚠️</span>
+            <span>{reviewType.message}</span>
+          </Badge>
+          {userRole === "admin" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRequestComplete(selectedContract)}
+              className={`gap-1 text-xs ${
+                isDark ? "border-amber-600 text-amber-300 hover:bg-amber-900/30" : "border-amber-300 text-amber-700 hover:bg-amber-50"
+              }`}
+            >
+              <span>✓</span>
+              <span>Mark as Completed</span>
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  return <Badge tone="emerald">🟢 Active</Badge>;
+})()}
                     </div>
                   </div>
                 </div>
@@ -1345,7 +1470,7 @@ export function Contracts() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-                  <Card className={`p-4 bg-muted/50`}>
+                  <Card className={`rounded-lg border p-4 ${isDark ? "border-slate-500 bg-slate-800/30" : "border-slate-200"}`}>
                     <div className="text-xs text-secondary">Total Performed Work (%)</div>
                     {(() => {
                       const workProgress = calculateProgressFromTariffs(selectedContract);
@@ -1365,7 +1490,7 @@ export function Contracts() {
                     })()}
                   </Card>
 
-                  <Card className={`p-4 bg-muted/50`}>
+                  <Card className={`rounded-lg border p-4 ${isDark ? "border-slate-500 bg-slate-800/30" : "border-slate-200"}`}>
                     <div className="text-xs text-secondary">Total Invoiced (%)</div>
                     {(() => {
                       const spent = calculateInvoiceProgress(selectedContract);
@@ -1386,7 +1511,7 @@ export function Contracts() {
                     })()}
                   </Card>
 
-                  <Card className={`p-4 bg-muted/50`}>
+                  <Card className={`rounded-lg border p-4 ${isDark ? "border-slate-500 bg-slate-800/30" : "border-slate-200"}`}>
                     {(() => {
                       const daysUntilStart = getDaysUntilStart(selectedContract.start_date);
                       const notStarted = daysUntilStart > 0;

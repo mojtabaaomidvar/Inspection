@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Sidebar, ViewKey } from "./components/Sidebar";
 import { Header } from "./components/Header";
-import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { Dashboard } from "./views/Dashboard";
 import { Clients } from "./views/Clients";
 import { Contracts } from "./views/Contracts";
@@ -9,6 +8,7 @@ import { Inspectors } from "./views/Inspectors";
 import { Inspections } from "./views/Inspections";
 import { Billing } from "./views/Billing";
 import { Reports } from "./views/Reports";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 
 const meta: Record<ViewKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Operations Dashboard", subtitle: "Live overview of inspections, revenue, and inspector workload" },
@@ -24,26 +24,37 @@ function AppContent() {
   const [view, setView] = useState<ViewKey>("dashboard");
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const { isDark } = useTheme();
+  
   const m = meta[view] ?? meta.dashboard;
 
   return (
-    <div className={`flex min-h-screen font-sans antialiased transition-colors duration-300 ${
+    <div className={`min-h-screen font-sans antialiased transition-colors ${
       isDark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
     }`}>
+      {/* 🔑 هدر: کل عرض، ثابت در بالا */}
+      <Header
+        title={m.title}
+        subtitle={m.subtitle}
+        isSidebarExpanded={sidebarExpanded}
+        onToggleSidebar={() => setSidebarExpanded(!sidebarExpanded)}
+      />
+
+      {/* 🔑 سایدبار: ثابت، زیر هدر */}
       <Sidebar
         active={view}
         onSelect={setView}
         isExpanded={sidebarExpanded}
       />
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <Header
-          title={m.title}
-          subtitle={m.subtitle}
-          isSidebarExpanded={sidebarExpanded}
-          onToggleSidebar={() => setSidebarExpanded(!sidebarExpanded)}
-        />
-        <div className="flex-1 overflow-auto p-6 lg:p-8">
+      {/* 🔑 محتوای اصلی: با margin مناسب */}
+      <main
+        className="transition-all duration-300"
+        style={{
+          marginLeft: sidebarExpanded ? "16rem" : "5rem",
+          paddingTop: "4rem", // ارتفاع هدر
+        }}
+      >
+        <div className="p-6 lg:p-8">
           {view === "dashboard" && <Dashboard />}
           {view === "clients" && <Clients />}
           {view === "contracts" && <Contracts />}

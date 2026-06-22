@@ -10,7 +10,8 @@ export type BadgeTone =
   | "indigo" 
   | "emerald" 
   | "amber" 
-  | "slate";
+  | "slate" 
+  | "violet";
 
 export interface BadgeProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export function Badge({ children, tone = "neutral", dot, className }: BadgeProps
     emerald: "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-800",
     amber: "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800",
     slate: "bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    violet: "bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-800",
   };
 
   return (

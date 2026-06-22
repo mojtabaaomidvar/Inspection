@@ -3,9 +3,10 @@ import { Card, Badge, Button, Avatar, Modal } from "../design-system";
 import { clients as initialClients, contracts as initialContracts, contractTariffs } from "../data/mockData";
 import { formatCurrency, formatDate } from "../lib/formatters";
 import { exportToExcel } from "../lib/exportToExcel";
-//import { validateNationalCode, validateNationalId, validateMobile } from "../lib/validators";
+import { validateNationalCode, validateNationalId, validateMobile } from "../lib/validators";
 import jalaali from "jalaali-js";
 import { useTheme } from "../contexts/ThemeContext";
+import { usePersistedState } from '../hooks/usePersistedState';
 
 // ============ PROGRESS CALCULATION ============
 const calculateProgressFromTariffs = (contract: any): number => {
@@ -155,8 +156,8 @@ export function Clients() {
   const { isDark } = useTheme();
   
   // ============ STATES ============
-  const [clients, setClients] = useState<Client[]>(initialClients);
-  const [contracts] = useState<Contract[]>(initialContracts);
+  const [clients, setClients] = usePersistedState<Client[]>('ics_clients', initialClients);
+  const [contracts] = usePersistedState<Contract[]>('ics_contracts', initialContracts);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [filter, setFilter] = useState<"ALL" | "LEGAL" | "INDIVIDUAL">("ALL");
@@ -457,45 +458,44 @@ export function Clients() {
   return (
     <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 lg:p-6 h-auto lg:h-[calc(100vh-140px)]`}>
       {/* LEFT PANEL */}
-      <div className={`col-span-1 lg:col-span-4 relative flex flex-col rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none ${
+      <div className={`col-span-1 lg:col-span-4 relative flex flex-col rounded-xl panel-3d overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none ${
         isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200/70"
       }`}>
         <div className={`relative z-10 border-b px-4 py-4 space-y-3 ${
           isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/50"
         }`}>
-          <div className="flex items-center gap-8">
-            <h3 className={`text-sm font-semibold shrink-0 ${isDark ? "text-slate-100" : "text-slate-900"}`}>Clients</h3>
-            <div className="relative flex-1">
-              <span className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"}`}>🔍</span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name, Code..."
-                className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}>✕</button>
-              )}
-            </div>
-          </div>
-          <div className={`flex items-center justify-end gap-3 pt-2 border-t ${isDark ? "border-slate-700" : "border-slate-100"}`}>
-            <Button variant="outline" size="sm" onClick={handleExportToExcel} className="shrink-0 gap-1.5 text-xs">📥 Export</Button>
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as "name" | "contracts" | "value")}
-                className={`appearance-none text-xs rounded-md border pl-2 pr-6 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer ${
-                  isDark ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                <option value="contracts">Most Contracts</option>
-                <option value="value">Highest Value</option>
-                <option value="name">Name (A-Z)</option>
-              </select>
-              <span className={`absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>▼</span>
-            </div>
-          </div>
+          <div className="flex items-center gap-3">
+			  
+			  <div className="relative flex-1">
+				<span className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"}`}>🔍</span>
+				<input
+				  type="text"
+				  value={searchQuery}
+				  onChange={(e) => setSearchQuery(e.target.value)}
+				  placeholder="Search by name, Code..."
+				  className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
+				/>
+				{searchQuery && (
+				  <button onClick={() => setSearchQuery("")} className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"}`}>✕</button>
+				)}
+			  </div>
+			  {/* 🔑 دکمه Sort کنار سرچ */}
+			  <div className="relative">
+				<select
+				  value={sortBy}
+				  onChange={(e) => setSortBy(e.target.value as "name" | "contracts" | "value")}
+				  className={`appearance-none text-xs rounded-md border pl-2 pr-6 py-2 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer ${
+					isDark ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+				  }`}
+				>
+				  <option value="contracts">Most Contracts</option>
+				  <option value="value">Highest Value</option>
+				  <option value="name">Name (A-Z)</option>
+				</select>
+				<span className={`absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>▼</span>
+			  </div>
+			</div>
+          
           <div className={`flex gap-1 rounded-lg border p-0.5 text-xs ${
             isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
           }`}>
@@ -505,11 +505,15 @@ export function Clients() {
                 <button
                   key={t}
                   onClick={() => setFilter(t)}
-                  className={`flex-1 rounded-md px-2 py-1.5 font-medium transition-colors ${
-                    filter === t
-                      ? (isDark ? "bg-indigo-900/40 text-indigo-300" : "bg-indigo-50 text-indigo-700")
-                      : (isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700")
-                  }`}
+                  className={`flex-1 rounded-md px-2 py-1.5 font-medium transition-all ${
+					  filter === t
+						? (isDark 
+							? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500" 
+							: "bg-indigo-50 text-indigo-700 border border-indigo-200")
+						: (isDark 
+							? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" 
+							: "text-slate-500 hover:text-slate-700 hover:bg-slate-50")
+					}`}
                 >
                   {t === "ALL" ? `All (${count})` : t === "LEGAL" ? `🏢 Legal (${count})` : `👤 Individual (${count})`}
                 </button>
@@ -522,7 +526,7 @@ export function Clients() {
           {filteredClients.length === 0 ? (
             <div className="p-8 text-center">
               <div className="text-4xl mb-2">🔍</div>
-              <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>No clients found</p>
+              <p className={`text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>No clients found</p>
             </div>
           ) : (
             filteredClients.map((client) => (
@@ -540,14 +544,23 @@ export function Clients() {
                 <Avatar name={client.name_en} gradient={client.logoColor} />
                 <div className="flex-1 min-w-0">
                   <div className={`text-sm font-medium truncate ${isDark ? "text-slate-100" : "text-slate-900"}`}>{client.name_en}</div>
-                  <div className={`text-xs truncate ${isDark ? "text-slate-400" : "text-slate-500"}`} dir="rtl">{client.name_fa}</div>
+                  <div className={`text-xs truncate ${isDark ? "text-slate-300" : "text-slate-600"}`} dir="rtl">{client.name_fa}</div>
                   <div className="flex items-center gap-2 mt-1">
-                    <Badge tone={client.type === "LEGAL" ? "indigo" : "violet"}>{client.type === "LEGAL" ? "Legal" : "Individual"}</Badge>
-                    {(() => {
-                      const realCount = contracts.filter(c => c.client_id === client.id).length;
-                      return (<span className={`text-[10px] font-mono ${isDark ? "text-slate-500" : "text-slate-400"}`}>{realCount} {realCount === 1 ? "Agreement" : "Agreements"}</span>);
-                    })()}
-                  </div>
+				  {/* 🔑 بج نوع مشتری فقط وقتی فیلتر روی ALL هست نمایش داده میشه */}
+				  {filter === "ALL" && (
+					<Badge tone={client.type === "LEGAL" ? "indigo" : "violet"}>
+					  {client.type === "LEGAL" ? "Legal" : "Individual"}
+					</Badge>
+				  )}
+				  {(() => {
+					  const realCount = contracts.filter(c => c.client_id === client.id).length;
+					  return (
+						<Badge tone="slate" className="font-semibold text-[10px]">
+						   {realCount} {realCount === 1 ? "Agreement" : "Agreements"}
+						</Badge>
+					  );
+					})()}
+				</div>
                 </div>
               </div>
             ))
@@ -559,24 +572,37 @@ export function Clients() {
 			? "from-slate-900 via-slate-900/95 to-slate-900/0" 
 			: "from-white via-white/95 to-white/0"
 		}`} />
-		<div className="absolute bottom-5 left-0 right-0 px-6 z-20">
-		  <Button 
-			variant="primary" 
-			size="md" 
-			onClick={handleAddClick} 
-			className={`w-full justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
-			  isDark 
-				? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
-				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
-			}`}
-		  >
-			<span>➕</span> Add New Client
-		  </Button>
-		</div>
+		<div className="absolute bottom-5 left-0 right-0 px-4 z-20 flex gap-2">
+  <Button 
+    variant="primary" 
+    size="md" 
+    onClick={handleAddClick} 
+    className={`flex-1 justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
+      isDark 
+        ? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
+        : "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
+    }`}
+  >
+    <span>➕</span> Add New Client
+  </Button>
+  <Button
+    variant="secondary"
+    size="md"
+    onClick={handleExportToExcel}
+    className={`transition-all duration-300 hover:-translate-y-0.5 ${
+      isDark 
+        ? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
+        : "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
+    }`}
+    title="Export to Excel"
+  >
+    📥
+  </Button>
+</div>
       </div>
 
       {/* RIGHT PANEL */}
-      <div className={`col-span-1 lg:col-span-8 flex flex-col rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ease-in-out ${
+      <div className={`col-span-1 lg:col-span-8 flex flex-col rounded-xl panel-3d overflow-hidden transition-all duration-300 ease-in-out ${
         isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200/70"
       }`}>
         {selectedClient ? (
@@ -585,13 +611,13 @@ export function Clients() {
               isDark ? "border-slate-700 bg-gradient-to-r from-slate-800 to-slate-900" : "border-slate-100 bg-gradient-to-r from-slate-50 to-white"
             }`}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className={`text-xs font-semibold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>Client Details</h2>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider ${isDark ? "text-slate-200" : "text-slate-600"}`}>Client Details</h2>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setSelectedClient(null)}
                   className={`transition-colors ${
-                    isDark ? "text-slate-400 hover:text-rose-400 hover:bg-rose-900/30" : "text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                    isDark ? "text-slate-200 hover:text-rose-400 hover:bg-rose-900/30" : "text-slate-200 hover:text-rose-600 hover:bg-rose-50"
                   }`}
                 >✕ Close Panel</Button>
               </div>
@@ -600,7 +626,7 @@ export function Clients() {
                   <Avatar name={selectedClient.name_en} gradient={selectedClient.logoColor} size="lg" />
                   <div>
                     <h3 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{selectedClient.name_en}</h3>
-                    <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`} dir="rtl">{selectedClient.name_fa}</p>
+                    <p className={`text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`} dir="rtl">{selectedClient.name_fa}</p>
                   </div>
                 </div>
                 <Button variant="outline" size="md" onClick={handleEditClick} className="gap-2 shadow-sm">
@@ -618,24 +644,24 @@ export function Clients() {
                     <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>🏢 Company Information</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>National ID</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>National ID</div>
                         <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{selectedClient.national_id || "—"}</div>
                       </div>
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Registration No</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Registration No</div>
                         <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(selectedClient as any).registration_no || "—"}</div>
                       </div>
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Economic Code</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Economic Code</div>
                         <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(selectedClient as any).economic_code || "—"}</div>
                       </div>
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Abbreviated Name</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Abbreviated Name</div>
                         <div className={`text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(selectedClient as any).abbreviated_name || "—"}</div>
                       </div>
 
                       <div className="relative">
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Emails</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Emails</div>
                         {(() => {
                           const contactEmails = filteredContactPersons.map(cp => cp.email).filter(email => email);
                           const allEmails = [
@@ -648,14 +674,14 @@ export function Clients() {
                             return (
                               <button
                                 onClick={() => setShowEmailDropdown(!showEmailDropdown)}
-                                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                                className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-700 font-medium"
                               >
                                 <span>📧 {allEmails.length} email{allEmails.length > 1 ? 's' : ''}</span>
                                 <span className={`text-[10px] transition-transform ${showEmailDropdown ? 'rotate-180' : ''}`}>▼</span>
                               </button>
                             );
                           }
-                          return <div className={`text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>—</div>;
+                          return <div className={`text-xs ${isDark ? "text-slate-300" : "text-slate-400"}`}>—</div>;
                         })()}
 
                         {showEmailDropdown && (() => {
@@ -730,11 +756,11 @@ export function Clients() {
                       </div>
 
                       <div className="relative">
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contact Persons</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Contact Persons</div>
                         {filteredContactPersons.length > 0 ? (
                           <button
                             onClick={() => setShowContactDropdown(!showContactDropdown)}
-                            className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-700 font-medium"
                           >
                             <span>👥 {filteredContactPersons.length} contact{filteredContactPersons.length > 1 ? 's' : ''}</span>
                             <span className={`text-[10px] transition-transform ${showContactDropdown ? 'rotate-180' : ''}`}>▼</span>
@@ -755,7 +781,7 @@ export function Clients() {
                                 <div className="flex items-center justify-between mb-1">
                                   <span className={`text-xs font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{cp.name}</span>
                                 </div>
-                                {cp.position && <div className={`text-[10px] mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{cp.position}</div>}
+                                {cp.position && <div className={`text-[10px] mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{cp.position}</div>}
                                 <div className="flex items-center gap-2 text-[10px]">
                                   <span className={`text-slate-400`}>📞</span>
                                   <span className={`font-mono ${isDark ? "text-slate-200" : "text-slate-700"}`}>{cp.mobile}</span>
@@ -786,16 +812,16 @@ export function Clients() {
                     <h3 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>👤 Personal Information</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>National Code</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>National Code</div>
                         <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{selectedClient.national_id || "—"}</div>
                       </div>
                       <div>
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Mobile</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Mobile</div>
                         <div className={`text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{selectedClient.phone || "—"}</div>
                       </div>
 
                       <div className="relative">
-                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Emails</div>
+                        <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Emails</div>
                         {(() => {
                           const allEmails = [
                             ...(selectedClient.email ? [selectedClient.email] : []),
@@ -804,7 +830,7 @@ export function Clients() {
 
                           if (allEmails.length > 0) {
                             return (
-                              <button onClick={() => setShowEmailDropdown(!showEmailDropdown)} className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                              <button onClick={() => setShowEmailDropdown(!showEmailDropdown)} className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-700 font-medium">
                                 <span>📧 {allEmails.length} email{allEmails.length > 1 ? 's' : ''}</span>
                                 <span className={`text-[10px] transition-transform ${showEmailDropdown ? 'rotate-180' : ''}`}>▼</span>
                               </button>
@@ -861,19 +887,19 @@ export function Clients() {
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
                   <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
-                    <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{summaryTitle}</div>
+                    <div className={`text-xs mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{summaryTitle}</div>
                     <div className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{dynamicContractCount}</div>
                   </div>
                  <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
-				  <div className="text-xs text-secondary mb-1">Total Value of Agreements</div> 
+				  <div className={`text-xs mb-1 ${isDark ? "text-slate-200" : "text-slate-600"}`}>Total Value of Agreements</div> 
 				  <div className="text-2xl font-bold text-accent-emerald">{formatCurrency(totalValue)}</div> 
 				</div>
 				<div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}> 
-				  <div className="text-xs text-secondary mb-1">Invoiced</div> 
+				  <div className={`text-xs mb-1 ${isDark ? "text-slate-200" : "text-slate-600"}`}>Invoiced Works</div> 
 				  <div className="text-2xl font-bold text-accent-indigo">{formatCurrency(totalInvoiced)}</div> 
 				</div>
                   <div className={`rounded-lg border p-4 ${isDark ? "border-slate-600 bg-slate-800/30" : "border-slate-200"}`}>
-                    <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Not Invoiced Works</div>
+                    <div className={`text-xs mb-1 ${isDark ? "text-slate-200" : "text-slate-600"}`}>Not Invoiced Works</div>
                     <div className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{formatCurrency(totalUninvoicedWork)}</div>
                   </div>
                 </div>
@@ -891,7 +917,7 @@ export function Clients() {
                           className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
                             contractTab === t
                               ? (isDark ? "bg-slate-700 text-slate-100 shadow-sm" : "bg-white text-slate-900 shadow-sm")
-                              : (isDark ? "text-slate-400" : "text-slate-500")
+                              : (isDark ? "text-slate-300" : "text-slate-600")
                           }`}
                         >
                           {t === "ALL" ? `All (${clientContracts.length})` : t === "CONTRACT" ? `📄 Contracts (${clientContracts.filter(c => c.type === "CONTRACT").length})` : `📦 Work Orders (${clientContracts.filter(c => c.type === "WORK_ORDER").length})`}
@@ -916,7 +942,7 @@ export function Clients() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <Badge tone={contract.type === "CONTRACT" ? "indigo" : "amber"}>{contract.type === "CONTRACT" ? "Contract" : "Work Order"}</Badge>
-                                <span className={`font-mono text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{contract.contract_no}</span>
+                                <span className={`font-mono text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>{contract.contract_no}</span>
                                 <Badge tone="slate">{contract.tariffs} {contract.tariffs === 1 ? "Tariff" : "Tariffs"}</Badge>
                               </div>
                               <h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{contract.contract_title}</h4>
@@ -927,7 +953,7 @@ export function Clients() {
                             </div>
                           </div>
 
-                          <div className={`flex items-center justify-between text-[10px] mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          <div className={`flex items-center justify-between text-[10px] mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                             <span>Work Performed</span>
                             <span className={`font-semibold ${getProgressTextClass(workProgress)}`}>{workProgress.toFixed(1)}%</span>
                           </div>
@@ -935,7 +961,7 @@ export function Clients() {
                             <div className={`h-full rounded-full ${getProgressBgClass(workProgress)}`} style={{ width: `${Math.min(workProgress, 100)}%` }} />
                           </div>
 
-                          <div className={`flex items-center justify-between text-[10px] mt-3 mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          <div className={`flex items-center justify-between text-[10px] mt-3 mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                             <span>Invoiced</span>
                             <span className={`font-semibold ${getProgressTextClass(invoiceProgress)}`}>{invoiceProgress.toFixed(1)}%</span>
                           </div>
@@ -943,7 +969,7 @@ export function Clients() {
                             <div className={`h-full rounded-full ${getProgressBgClass(invoiceProgress)}`} style={{ width: `${Math.min(invoiceProgress, 100)}%` }} />
                           </div>
 
-                          <div className={`text-xs mt-2 ${isDark ? "text-slate-500" : "text-slate-400"}`}>{contract.start_date} → {contract.end_date}</div>
+                          <div className={`text-xs mt-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{contract.start_date} → {contract.end_date}</div>
                         </div>
                       );
                     })}
@@ -973,22 +999,22 @@ export function Clients() {
               </div>
 
               <h2 className={`text-3xl font-bold mb-3 ${isDark ? "text-slate-200" : "text-slate-700"}`}>OFFSHORE & ENERGY DEPARTMENT INSPECTION PLATFORM</h2>
-              <p className={`text-base max-w-md mx-auto leading-relaxed ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <p className={`text-base max-w-md mx-auto leading-relaxed ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                 Select a client from the list to view details, contracts, and contact information
               </p>
 
               <div className="flex items-center justify-center gap-6 mt-8">
                 <div className="flex flex-col items-center gap-2">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isDark ? "bg-indigo-900/50" : "bg-indigo-100"}`}>👥</div>
-                  <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>Clients</span>
+                  <span className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>Clients</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isDark ? "bg-emerald-900/50" : "bg-emerald-100"}`}>📄</div>
-                  <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contracts</span>
+                  <span className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>Contracts</span>
                 </div>
                 <div className="flex flex-col items-center gap-2">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isDark ? "bg-amber-900/50" : "bg-amber-100"}`}>📧</div>
-                  <span className={`text-xs font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contacts</span>
+                  <span className={`text-xs font-medium ${isDark ? "text-slate-300" : "text-slate-600"}`}>Contacts</span>
                 </div>
               </div>
             </div>
@@ -1217,7 +1243,7 @@ export function Clients() {
                     isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50/50"
                   }`}>
                     <div className="col-span-4">
-                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Liaison Name *</label>
+                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Liaison Name *</label>
                       <input
                         value={cp.name}
                         onChange={(e) => updateContactPerson(cp.id, "name", e.target.value)}
@@ -1227,7 +1253,7 @@ export function Clients() {
                       />
                     </div>
                     <div className="col-span-3">
-                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Position/Rank</label>
+                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Position/Rank</label>
                       <input
                         value={cp.position}
                         onChange={(e) => updateContactPerson(cp.id, "position", e.target.value)}
@@ -1237,7 +1263,7 @@ export function Clients() {
                       />
                     </div>
                     <div className="col-span-3">
-                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Mobile *</label>
+                      <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Mobile *</label>
                       <input
                         value={cp.mobile}
                         onChange={(e) => updateContactPerson(cp.id, "mobile", e.target.value.replace(/\D/g, ""))}
@@ -1248,7 +1274,7 @@ export function Clients() {
                     </div>
                     <div className="col-span-2 flex items-end gap-1">
                       <div className="flex-1">
-                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Direct Email</label>
+                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Direct Email</label>
                         <input
                           value={cp.email}
                           onChange={(e) => updateContactPerson(cp.id, "email", e.target.value)}
@@ -1292,7 +1318,7 @@ export function Clients() {
                 <Avatar name={viewDuplicateClient.name_en} gradient={viewDuplicateClient.logoColor} size="lg" />
                 <div>
                   <h2 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{viewDuplicateClient.name_en}</h2>
-                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`} dir="rtl">{viewDuplicateClient.name_fa}</p>
+                  <p className={`text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`} dir="rtl">{viewDuplicateClient.name_fa}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <Badge tone={viewDuplicateClient.type === "LEGAL" ? "indigo" : "violet"}>{viewDuplicateClient.type === "LEGAL" ? "Legal Entity" : "Individual"}</Badge>
                     <Badge tone="slate">{(viewDuplicateClient as any).departments?.join(", ") || "Unknown"}</Badge>
@@ -1302,23 +1328,23 @@ export function Clients() {
               {viewDuplicateClient.type === "LEGAL" && (
                 <div className={`grid grid-cols-2 md:grid-cols-3 gap-4 text-sm pt-4 border-t ${isDark ? "border-slate-700" : "border-slate-200"}`}>
                   <div>
-                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>National ID</div>
+                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>National ID</div>
                     <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{viewDuplicateClient.national_id || "—"}</div>
                   </div>
                   <div>
-                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Registration No</div>
+                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Registration No</div>
                     <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(viewDuplicateClient as any).registration_no || "—"}</div>
                   </div>
                   <div>
-                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Economic Code</div>
+                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Economic Code</div>
                     <div className={`font-mono text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(viewDuplicateClient as any).economic_code || "—"}</div>
                   </div>
                   <div>
-                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Company Type</div>
+                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Company Type</div>
                     <div className={`text-xs ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(viewDuplicateClient as any).company_type || "—"}</div>
                   </div>
                   <div>
-                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Total Contacts</div>
+                    <div className={`text-[10px] uppercase font-semibold mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Total Contacts</div>
                     <div className={`text-xs font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{(viewDuplicateClient as any).contactPersons?.length || 0}</div>
                   </div>
                 </div>
@@ -1394,38 +1420,38 @@ export function Clients() {
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
-                  <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Full Name (English)</label>
+                  <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Full Name (English)</label>
                   <div className={`w-full rounded-lg border py-2.5 px-3 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.name_en}</div>
                 </div>
                 <div dir="rtl">
-                  <label className={`mb-1.5 block text-xs font-semibold text-left ${isDark ? "text-slate-400" : "text-slate-500"}`}>Full Name (Farsi)</label>
+                  <label className={`mb-1.5 block text-xs font-semibold text-left ${isDark ? "text-slate-300" : "text-slate-600"}`}>Full Name (Farsi)</label>
                   <div className={`w-full rounded-lg border py-2.5 px-3 text-sm text-right ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.name_fa}</div>
                 </div>
                 {editForm.type === "LEGAL" && (<>
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Abbreviated Name</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Abbreviated Name</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.abbreviated_name || "—"}</div>
                   </div>
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Company Type</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Company Type</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.company_type || "—"}</div>
                   </div>
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>National ID</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>National ID</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm font-mono ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.national_id}</div>
                   </div>
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Registration Number</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Registration Number</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm font-mono ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.registration_no || "—"}</div>
                   </div>
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Economic Code</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Economic Code</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm font-mono ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.economic_code || "—"}</div>
                   </div>
                 </>)}
                 {editForm.type === "INDIVIDUAL" && (
                   <div>
-                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>National Code</label>
+                    <label className={`mb-1.5 block text-xs font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>National Code</label>
                     <div className={`w-full rounded-lg border py-2.5 px-3 text-sm font-mono ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-slate-200 bg-slate-100 text-slate-600"}`}>{editForm.national_id}</div>
                   </div>
                 )}
@@ -1496,25 +1522,25 @@ export function Clients() {
                   </h3>
                   <button type="button" onClick={addEditContactPerson} className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">+ ADD LIAISON</button>
                 </div>
-                <p className={`text-xs mb-4 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Only contact persons related to your department ({currentDepartment}) are shown and editable. Other departments' contacts (if any) are hidden.</p>
+                <p className={`text-xs mb-4 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Only contact persons related to your department ({currentDepartment}) are shown and editable. Other departments' contacts (if any) are hidden.</p>
                 <div className="space-y-3">
                   {editForm.contactPersons?.map((cp: any) => (
                     <div key={cp.id} className={`grid grid-cols-12 gap-3 p-4 rounded-xl border ${isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-slate-50/50"}`}>
                       <div className="col-span-4">
-                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Liaison Name *</label>
+                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Liaison Name *</label>
                         <input value={cp.name} onChange={(e) => updateEditContactPerson(cp.id, "name", e.target.value)} className={`w-full rounded border px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none ${isDark ? "border-slate-700 bg-slate-800 text-slate-100" : "border-slate-200 bg-white"}`} />
                       </div>
                       <div className="col-span-3">
-                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Position/Rank</label>
+                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Position/Rank</label>
                         <input value={cp.position} onChange={(e) => updateEditContactPerson(cp.id, "position", e.target.value)} className={`w-full rounded border px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none ${isDark ? "border-slate-700 bg-slate-800 text-slate-100" : "border-slate-200 bg-white"}`} />
                       </div>
                       <div className="col-span-3">
-                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Mobile *</label>
+                        <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Mobile *</label>
                         <input value={cp.mobile} onChange={(e) => updateEditContactPerson(cp.id, "mobile", e.target.value.replace(/\D/g, ""))} className={`w-full rounded border px-2 py-1.5 text-xs font-mono focus:border-indigo-400 focus:outline-none ${isDark ? "border-slate-700 bg-slate-800 text-slate-100" : "border-slate-200 bg-white"}`} />
                       </div>
                       <div className="col-span-2 flex items-end gap-1">
                         <div className="flex-1">
-                          <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>Direct Email</label>
+                          <label className={`mb-1 block text-[10px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>Direct Email</label>
                           <input value={cp.email} onChange={(e) => updateEditContactPerson(cp.id, "email", e.target.value)} className={`w-full rounded border px-2 py-1.5 text-xs focus:border-indigo-400 focus:outline-none ${isDark ? "border-slate-700 bg-slate-800 text-slate-100" : "border-slate-200 bg-white"}`} />
                         </div>
                         {editForm.contactPersons.length > 1 && (
@@ -1555,33 +1581,33 @@ export function Clients() {
                     <Badge tone={selectedContract.status === "ACTIVE" ? "emerald" : "slate"}>{selectedContract.status}</Badge>
                   </div>
                   <h2 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{selectedContract.contract_title}</h2>
-                  <div className={`text-sm mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{selectedContract.contract_no} • {selectedContract.client_name}</div>
+                  <div className={`text-sm mt-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{selectedContract.contract_no} • {selectedContract.client_name}</div>
                 </div>
                 <div className="text-right">
-                  <div className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>Total Value</div>
+                  <div className={`text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>Total Value</div>
                   <div className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{formatCurrency(selectedContract.total_value)}</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <Card className="p-4 bg-muted/50">
-                  <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Work Progress</div>
+                <Card className="p-4 card-3d">
+                  <div className={`text-xs mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Work Progress</div>
                   <div className={`text-lg font-bold ${getProgressTextClass(workProgress)}`}>{workProgress.toFixed(2)}%</div>
                   <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-200"}`}>
                     <div className={`h-full rounded-full ${getProgressBgClass(workProgress)}`} style={{ width: `${Math.min(workProgress, 100)}%` }} />
                   </div>
                 </Card>
 
-                <Card className="p-4 bg-muted/50">
-                  <div className={`text-xs mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Invoice Progress</div>
+                <Card className="p-4 card-3d">
+                  <div className={`text-xs mb-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>Invoice Progress of Performed Works</div>
                   <div className={`text-lg font-bold ${getProgressTextClass(invoiceProgress)}`}>{invoiceProgress.toFixed(2)}%</div>
                   <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-200"}`}>
                     <div className={`h-full rounded-full ${getProgressBgClass(invoiceProgress)}`} style={{ width: `${Math.min(invoiceProgress, 100)}%` }} />
                   </div>
                 </Card>
 
-                <Card className="p-4 bg-muted/50">
-                  <div className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>Time Remaining</div>
+                <Card className="p-4 card-3d">
+                  <div className={`text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>Time Remaining</div>
                   {daysLeft < 0 ? (
                     <div className="text-lg font-bold text-rose-600">{Math.abs(daysLeft)} days overdue</div>
                   ) : daysLeft === 0 ? (
