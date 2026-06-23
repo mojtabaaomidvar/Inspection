@@ -8,6 +8,7 @@ interface SidebarProps {
   active: ViewKey;
   onSelect: (key: ViewKey) => void;
   isExpanded: boolean;
+  expiringContractsCount?: number;
 }
 
 const navItems: { key: ViewKey; label: string; icon: typeof LayoutDashboard; badge?: string }[] = [
@@ -20,7 +21,7 @@ const navItems: { key: ViewKey; label: string; icon: typeof LayoutDashboard; bad
   { key: "reports", label: "Reports", icon: BarChart3 },
 ];
 
-export function Sidebar({ active, onSelect, isExpanded }: SidebarProps) {
+export function Sidebar({ active, onSelect, isExpanded, expiringContractsCount = 0 }: SidebarProps) {
   const { isDark } = useTheme();
 
   return (
@@ -40,6 +41,11 @@ export function Sidebar({ active, onSelect, isExpanded }: SidebarProps) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = active === item.key;
+		  // 🔑 تشخیص نمایش بج و نوع آلارم
+          const showBadge = item.key === "contracts" ? expiringContractsCount > 0 : !!item.badge;
+          const badgeText = item.key === "contracts" ? expiringContractsCount : item.badge;
+          const isAlert = item.key === "contracts" && expiringContractsCount > 0;
+		  
           return (
             <button
               key={item.key}
@@ -59,11 +65,18 @@ export function Sidebar({ active, onSelect, isExpanded }: SidebarProps) {
                 isActive ? "text-indigo-500" : isDark ? "text-slate-500" : "text-slate-400"
               }`} />
               {isExpanded && <span className="flex-1 text-left">{item.label}</span>}
-              {item.badge && isExpanded && (
-                <span className="rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-500 ring-1 ring-inset ring-rose-500/30 shadow-sm">
-                  {item.badge}
+			  
+              {/* 🔑 نمایش بج داینامیک + آلارم */}
+              {showBadge && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${
+                  isAlert 
+                    ? "bg-rose-500/20 text-rose-500 ring-rose-500/40 animate-pulse"
+                    : "bg-rose-500/15 text-rose-500 ring-rose-500/30"
+                }`}>
+                  {badgeText}
                 </span>
               )}
+              
               {isActive && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-lg shadow-indigo-500/80" />}
             </button>
           );

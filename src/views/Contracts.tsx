@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button, Badge, Card, Avatar, Modal } from "../design-system";
 import {
   contracts as initialContracts,
@@ -7,10 +7,8 @@ import {
 } from "../data/mockData";
 import { formatCurrency, contractHealth } from "../lib/formatters";
 import { exportToExcel } from "../lib/exportToExcel";
-import DatePicker from "react-multi-date-picker";
-import persian from "react-date-object/calendars/persian";
-import persian_fa from "react-date-object/locales/persian_fa";
-import jalaali from "jalaali-js";
+import { JalaaliDatePicker } from "../components/JalaaliDatePicker";
+import * as jalaali from "jalaali-js";
 import { useTheme } from "../contexts/ThemeContext";
 import { usePersistedState } from '../hooks/usePersistedState';
 
@@ -73,6 +71,44 @@ interface Contract {
   tariffLines?: TariffLine[];
   department: string;
   description?: string;
+  financial_terms?: ContractFinancialTerms;
+  service_description?: "TPI" | "MWS" | "TPER" | "OTHER" | "";
+}
+
+// ============ NEW INTERFACES FOR FINANCIAL TERMS ============
+interface Adjustment {
+  enabled: boolean;
+  mode: "FIXED" | "TBD";
+  percentage: number;
+  effective_date: string;
+}
+
+interface ContractModification {
+  percentage: number;
+}
+
+interface Guarantee {
+  has_guarantee: boolean;
+  percentage: number;
+  type: "CHECK" | "BANK_GUARANTEE" | "PROMISSORY_NOTE" | "CASH_BLOCK";
+}
+
+interface ContractAttachment {
+  id: string;
+  name: string;
+  file_object: File | null;
+  preview_url: string;
+  category: "CONTRACT" | "ADDENDUM" | "CORRESPONDENCE" | "TECHNICAL";
+  uploaded_at: string;
+}
+
+interface ContractFinancialTerms {
+  adjustment: Adjustment;
+  contract_modification: ContractModification;
+  guarantee: Guarantee;
+  good_performance_percentage: number;
+  insurance_deduction_percentage: number;
+  attachments: ContractAttachment[];
 }
 
 const CURRENT_DEPARTMENT = "Unit A";
@@ -140,9 +176,18 @@ const generateContractNo = (
 
 // ============ NUMBER FORMATTING ============
 const formatNumberInput = (value: string): string => {
-  const num = value.replace(/[^0-9]/g, "");
-  if (!num) return "";
-  return Number(num).toLocaleString("en-US");
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const parts = cleaned.split(".");
+  if (parts.length > 2) {
+    return parts[0] + "." + parts.slice(1).join("");
+  }
+  const [intPart, decPart] = parts;
+  const formattedInt = intPart ? Number(intPart).toLocaleString("en-US") : "";
+  
+  if (decPart !== undefined) {
+    return formattedInt + "." + decPart;
+  }  
+  return formattedInt;
 };
 
 const parseNumberInput = (value: string): number => {
@@ -163,48 +208,37 @@ const calculateProgressFromTariffs = (contract: Contract): number => {
   return (totalPerformed / contract.total_value) * 100;
 };
 
-// 🔑 محاسبه درصد invoiced نسبت به کار انجام شده (نه کل قرارداد)
 const calculateInvoiceProgress = (contract: Contract): number => {
   const tariffs = contractTariffs.filter((t) => t.contract_id === contract.id);
   if (tariffs.length === 0) return 0;
-  
   const totalInvoiced = tariffs.reduce((sum, t) => sum + (t.invoiced || 0), 0);
   const performedWork = tariffs.reduce((sum, t) => {
     const rate = typeof t.rate === 'string' ? parseNumberInput(t.rate) : (t.rate || 0);
     const consumed = t.consumed_quantity || 0;
     return sum + (rate * consumed);
   }, 0);
-  
   if (performedWork <= 0) return 0;
   return (totalInvoiced / performedWork) * 100;
 };
 
-// محاسبه درصد روزهای گذشته از قرارداد
 const calculateDaysProgress = (contract: Contract): number => {
   if (!contract.start_date || !contract.end_date) return 0;
-  
   const [startJy, startJm, startJd] = contract.start_date.split('/').map(Number);
   const [endJy, endJm, endJd] = contract.end_date.split('/').map(Number);
-  
   const startG = jalaali.toGregorian(startJy, startJm, startJd);
   const endG = jalaali.toGregorian(endJy, endJm, endJd);
-  
   const startDate = new Date(startG.gy, startG.gm - 1, startG.gd);
   const endDate = new Date(endG.gy, endG.gm - 1, endG.gd);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
   const totalDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
   const daysPassed = (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-  
   if (totalDays <= 0) return 0;
   if (daysPassed <= 0) return 0;
   if (daysPassed >= totalDays) return 100;
-  
   return (daysPassed / totalDays) * 100;
 };
 
-// رنگ پروگرس بار بر اساس درصد روزهای گذشته
 const getDaysProgressColor = (progress: number): string => {
   if (progress >= 90) return "bg-rose-500";
   if (progress >= 70) return "bg-amber-500";
@@ -245,6 +279,15 @@ const getDaysUntilStart = (startDate: string): number => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+// 🔑 محاسبه اولین روز سال شمسی بعد از تاریخ شروع قرارداد
+const getNextJalaaliYearStart = (startDate: string): string => {
+  if (!startDate) return "";
+  const [jy, jm, jd] = startDate.split('/').map(Number);
+  if (!jy) return "";
+  const nextYear = jy + 1;
+  return `${nextYear}/01/01`;
+};
+
 const calculateBudgetSpent = (totalValue: number, invoiced: number): number => {
   if (totalValue <= 0) return 0;
   return (invoiced / totalValue) * 100;
@@ -265,6 +308,46 @@ const getContractFinancialStatus = (contract: Contract): "completed" | "needs_re
   return "active";
 };
 
+const getAdjustmentReminder = (contract: Contract): {
+  show: boolean;
+  daysUntil: number;
+  mode: "FIXED" | "TBD";
+  percentage: number;
+  effectiveDate: string;
+} => {
+  if (!contract.financial_terms?.adjustment?.enabled) {
+    return { show: false, daysUntil: 0, mode: "FIXED", percentage: 0, effectiveDate: "" };
+  }
+
+  const adjustment = contract.financial_terms.adjustment;
+  if (!adjustment.effective_date) {
+    return { show: false, daysUntil: 0, mode: adjustment.mode, percentage: adjustment.percentage, effectiveDate: "" };
+  }
+
+  const daysUntil = getDaysUntilStart(adjustment.effective_date);
+  
+  // نمایش یادآوری اگه:
+  // ۱. تاریخ اعمال در آینده هست (daysUntil > 0)
+  // ۲. کمتر از ۳۰ روز مونده (daysUntil <= 30)
+  const shouldShow = daysUntil > 0 && daysUntil <= 30;
+
+  return {
+    show: shouldShow,
+    daysUntil,
+    mode: adjustment.mode,
+    percentage: adjustment.percentage,
+    effectiveDate: adjustment.effective_date,
+  };
+};
+
+const isExpiringSoon = (contract: Contract): { expiring: boolean; daysLeft: number } => {
+  if (contract.status !== "ACTIVE") return { expiring: false, daysLeft: 0 };
+  const daysLeft = calculateDaysLeft(contract.end_date);
+  const daysUntilStart = getDaysUntilStart(contract.start_date);
+  if (daysUntilStart > 0 || daysLeft <= 0) return { expiring: false, daysLeft };
+  return { expiring: daysLeft <= 132, daysLeft };
+};
+
 const getNeedsReviewType = (contract: Contract): {
   type: "value_review" | "invoice_review" | "time_review" | "none";
   message: string;
@@ -273,7 +356,6 @@ const getNeedsReviewType = (contract: Contract): {
   const daysLeft = calculateDaysLeft(contract.end_date);
   const isExpired = daysLeft < 0;
   
-  // محاسبه کار انجام شده
   const tariffs = contractTariffs.filter((t) => t.contract_id === contract.id);
   const performedWork = tariffs.reduce((sum, t) => {
     const rate = typeof t.rate === 'string' ? parseNumberInput(t.rate) : (t.rate || 0);
@@ -281,11 +363,9 @@ const getNeedsReviewType = (contract: Contract): {
     return sum + (rate * consumed);
   }, 0);
   
-  // محاسبه کل صورتحساب‌ها
   const totalInvoiced = tariffs.reduce((sum, t) => sum + (t.invoiced || 0), 0);
   const invoicePercentage = performedWork > 0 ? (totalInvoiced / performedWork) * 100 : 0;
   
-  // 🔴 ۱. Total Agreement Value Review
   if (performedWork > contract.total_value && !isExpired) {
     const overAmount = performedWork - contract.total_value;
     return {
@@ -295,7 +375,6 @@ const getNeedsReviewType = (contract: Contract): {
     };
   }
   
-  // 🔴 ۲. Invoice Review
   if (invoicePercentage > 110) {
     return {
       type: "invoice_review",
@@ -304,7 +383,6 @@ const getNeedsReviewType = (contract: Contract): {
     };
   }
   
-  // 🟡 ۳. Time Review (تاریخ تموم شده ولی مشکل مالی نداره)
   if (isExpired && contract.invoiced <= contract.total_value && invoicePercentage <= 110) {
     const daysOverdue = Math.abs(daysLeft);
     return {
@@ -325,50 +403,6 @@ const getInvoicedPercentage = (contract: Contract): number => {
   if (contract.total_value <= 0) return 0;
   return (contract.invoiced / contract.total_value) * 100;
 };
-
-// ============ PERSIAN DATE PICKER ============
-interface JalaaliDatePickerProps {
-  value: string;
-  onChange: (date: string) => void;
-  minDate?: string;
-  maxDate?: string;
-  placeholder?: string;
-  disabled?: boolean;
-}
-
-function JalaaliDatePicker({
-  value,
-  onChange,
-  minDate,
-  maxDate,
-  placeholder = "Select date",
-  disabled = false,
-}: JalaaliDatePickerProps) {
-  const { isDark } = useTheme();
-  const handleSelect = (date: any) => {
-    if (date && !Array.isArray(date)) {
-      const formatted = `${date.year}/${String(date.month.index).padStart(2, "0")}/${String(date.day).padStart(2, "0")}`;
-      onChange(formatted);
-    } else {
-      onChange("");
-    }
-  };
-  return (
-    <DatePicker
-      calendar={persian}
-      locale={persian_fa}
-      value={value || undefined}
-      onChange={handleSelect}
-      calendarPosition="bottom-right"
-      inputClass={`w-full rounded-lg py-2.5 px-3 text-sm text-left font-sans input-themed`}
-      placeholder={placeholder}
-      disabled={disabled}
-      minDate={minDate}
-      maxDate={maxDate}
-      format="YYYY/MM/DD"
-    />
-  );
-}
 
 // ============ CLIENT SELECTOR MODAL ============
 interface ClientSelectorModalProps {
@@ -404,7 +438,7 @@ function ClientSelectorModal({ value, onChange, onAddNew, error }: ClientSelecto
           type="button"
           onClick={() => setIsOpen(true)}
           className={`w-full rounded-lg border px-3 py-2 text-sm text-left focus:outline-none focus:ring-2 focus:ring-indigo-100 input-themed ${
-            error ? "border-rose-300" : ""
+            error ? `border-rose-300` : ``
           }`}
         >
           {selectedClient ? (
@@ -676,10 +710,187 @@ function TariffEditor({ tariffs, onChange, error, showTotals = true }: TariffEdi
   );
 }
 
+// ============ CONTRACT ATTACHMENTS EDITOR ============
+const ATTACHMENT_CATEGORIES = [
+  { value: "CONTRACT", label: "📄 Contract", color: "indigo" },
+  { value: "ADDENDUM", label: "📎 Addendum", color: "amber" },
+  { value: "CORRESPONDENCE", label: "📧 Correspondence", color: "sky" },
+  { value: "TECHNICAL", label: "🔧 Technical Docs", color: "emerald" },
+] as const;
+
+function ContractAttachmentsEditor({
+  attachments,
+  onChange,
+  isDark,
+}: {
+  attachments: ContractAttachment[];
+  onChange: (attachments: ContractAttachment[]) => void;
+  isDark: boolean;
+}) {
+  const [activeCategory, setActiveCategory] = useState<"CONTRACT" | "ADDENDUM" | "CORRESPONDENCE" | "TECHNICAL">("CONTRACT");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newAttachments: ContractAttachment[] = Array.from(files).map((file) => ({
+      id: `att${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: file.name,
+      file_object: file,
+      preview_url: URL.createObjectURL(file),
+      category: activeCategory,
+      uploaded_at: new Date().toISOString(),
+    }));
+
+    onChange([...attachments, ...newAttachments]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (id: string) => {
+    const att = attachments.find(a => a.id === id);
+    if (att?.preview_url) URL.revokeObjectURL(att.preview_url);
+    onChange(attachments.filter(a => a.id !== id));
+  };
+
+  const filteredAttachments = attachments.filter(a => a.category === activeCategory);
+  const counts = {
+    CONTRACT: attachments.filter(a => a.category === "CONTRACT").length,
+    ADDENDUM: attachments.filter(a => a.category === "ADDENDUM").length,
+    CORRESPONDENCE: attachments.filter(a => a.category === "CORRESPONDENCE").length,
+    TECHNICAL: attachments.filter(a => a.category === "TECHNICAL").length,
+  };
+
+  return (
+    <div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/50"}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📁</span>
+          <h3 className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            Contract Attachments
+          </h3>
+          <Badge tone="indigo">{attachments.length} files</Badge>
+        </div>
+      </div>
+
+      <div className={`flex gap-1 rounded-lg border p-1 mb-3 text-xs ${
+        isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
+      }`}>
+        {ATTACHMENT_CATEGORIES.map((cat) => (
+          <button
+            key={cat.value}
+            type="button"
+            onClick={() => setActiveCategory(cat.value as any)}
+            className={`flex-1 rounded px-2 py-1.5 font-medium transition-all whitespace-nowrap ${
+              activeCategory === cat.value
+                ? (isDark
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500"
+                    : "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm")
+                : (isDark
+                    ? "text-slate-300 hover:text-slate-100 hover:bg-slate-700"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50")
+            }`}
+          >
+            {cat.label} ({counts[cat.value]})
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+          onChange={handleFileSelect}
+          className="hidden"
+          id="attachment-upload"
+        />
+        <label
+          htmlFor="attachment-upload"
+          className={`flex items-center justify-center gap-2 w-full rounded-lg border-2 border-dashed px-4 py-3 text-sm cursor-pointer transition-colors ${
+            isDark
+              ? "border-slate-600 bg-slate-800/50 text-slate-300 hover:border-indigo-500 hover:bg-slate-800"
+              : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400 hover:bg-indigo-50/30"
+          }`}
+        >
+          <span>📎</span>
+          <span className="font-medium">
+            Upload to <span className="text-indigo-500">{ATTACHMENT_CATEGORIES.find(c => c.value === activeCategory)?.label}</span>
+          </span>
+        </label>
+      </div>
+
+      {filteredAttachments.length === 0 ? (
+        <div className={`text-center py-6 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+          No files in this category yet
+        </div>
+      ) : (
+        <div className="space-y-1.5 max-h-60 overflow-y-auto">
+          {filteredAttachments.map((att) => (
+            <div
+              key={att.id}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-200 bg-white"
+              }`}
+            >
+              <span className="text-base">
+                {att.name.toLowerCase().endsWith('.pdf') ? '📄' :
+                 att.name.toLowerCase().match(/\.(jpg|jpeg|png)$/) ? '🖼️' :
+                 att.name.toLowerCase().match(/\.(xls|xlsx)$/) ? '📊' : '📝'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className={`font-medium truncate ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                  {att.name}
+                </div>
+                <div className={`text-[10px] ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                  {att.file_object ? `${(att.file_object.size / 1024).toFixed(1)} KB` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeAttachment(att.id)}
+                className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30 rounded transition-colors"
+                title="Remove"
+              >
+                🗑️
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ SMART DATE HANDLERS ============
+const handleSmartStartDateChange = (
+  newStartDate: string,
+  currentEndDate: string,
+  setForm: (form: any) => void,
+  form: any
+) => {
+  const updatedForm = { ...form, start_date: newStartDate };
+  
+  // اگه تاریخ پایان قبلاً انتخاب شده و از تاریخ شروع جدید زودتره
+  if (newStartDate && currentEndDate && currentEndDate < newStartDate) {
+    updatedForm.end_date = newStartDate; // تاریخ پایان = تاریخ شروع
+  }
+  
+  setForm(updatedForm);
+};
+
+const handleSmartEndDateChange = (
+  newEndDate: string,
+  setForm: (form: any) => void,
+  form: any
+) => {
+  setForm({ ...form, end_date: newEndDate });
+};
+
 // ============ MAIN COMPONENT ============
 export function Contracts() {
   const { isDark } = useTheme();
-
   const [contracts, setContracts] = usePersistedState<Contract[]>('ics_contracts', initialContracts);
   const [clients, setClients] = usePersistedState<Client[]>('ics_clients', initialClients);
   const [searchQuery, setSearchQuery] = useState("");
@@ -695,6 +906,7 @@ export function Contracts() {
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  
   const [addForm, setAddForm] = useState({
     contract_no: "",
     external_contract_no: "",
@@ -718,6 +930,7 @@ export function Contracts() {
     type: "CONTRACT" as "CONTRACT" | "WORK_ORDER",
     contract_count: 1,
     description: "",
+	
     tariffs: [
       {
         id: "1",
@@ -729,6 +942,28 @@ export function Contracts() {
         isLumpSum: false,
       },
     ] as TariffLine[],
+	
+    adjustment: {
+	  enabled: false,
+	  mode: "FIXED",
+	  percentage: 0,
+	  effective_date: "",
+	} as Adjustment,
+	
+    contract_modification: {
+	  percentage: 0,
+	} as ContractModification,
+
+    guarantee: {
+      has_guarantee: false,
+      percentage: 0,
+      type: "BANK_GUARANTEE" as "CHECK" | "BANK_GUARANTEE" | "PROMISSORY_NOTE" | "CASH_BLOCK",
+    } as Guarantee,
+	
+    good_performance_percentage: 10,
+    insurance_deduction_percentage: 5,
+    attachments: [] as ContractAttachment[],
+	service_description: "" as "TPI" | "MWS" | "TPER" | "OTHER" | "",
   });
 
   const [editForm, setEditForm] = useState<any>({});
@@ -797,35 +1032,36 @@ export function Contracts() {
 
   // ============ 3. FINAL FILTERED ============
   const filteredContracts = useMemo(() => {
-  let result = baseContracts.filter((contract) => {
-    const matchesType = typeFilter === "ALL" || contract.type === typeFilter;
-    
-    // 🔑 فیلتر بر اساس وضعیت واقعی
-    const financialStatus = getContractFinancialStatus(contract);
-    let matchesStatus = true;
-    if (statusFilter === "ACTIVE") matchesStatus = financialStatus === "active";
-    else if (statusFilter === "NOT_STARTED") matchesStatus = financialStatus === "not_started";
-    else if (statusFilter === "NEEDS_REVIEW") matchesStatus = financialStatus === "needs_review";
-    else if (statusFilter === "COMPLETED") matchesStatus = financialStatus === "completed";
-    
-    return matchesType && matchesStatus;
-  });
-  
-  return result.sort((a, b) => {
-    if (sortBy === "date") return b.start_date.localeCompare(a.start_date);
-    if (sortBy === "value") return b.total_value - a.total_value;
-    if (sortBy === "status") {
-      const order: Record<string, number> = { 
-        not_started: 1, 
-        active: 2, 
-        needs_review: 3, 
-        completed: 4 
-      };
-      return (order[getContractFinancialStatus(a)] || 99) - (order[getContractFinancialStatus(b)] || 99);
-    }
-    return 0;
-  });
-}, [baseContracts, typeFilter, statusFilter, sortBy]);
+    let result = baseContracts.filter((contract) => {
+      const matchesType = typeFilter === "ALL" || contract.type === typeFilter;
+      const financialStatus = getContractFinancialStatus(contract);
+      let matchesStatus = true;
+      if (statusFilter === "ACTIVE") matchesStatus = financialStatus === "active";
+      else if (statusFilter === "NOT_STARTED") matchesStatus = financialStatus === "not_started";
+      else if (statusFilter === "NEEDS_REVIEW") matchesStatus = financialStatus === "needs_review";
+      else if (statusFilter === "COMPLETED") matchesStatus = financialStatus === "completed";
+      
+      return matchesType && matchesStatus;
+    });
+
+    return result.sort((a, b) => {
+      const aExpiring = isExpiringSoon(a);
+      const bExpiring = isExpiringSoon(b);
+      if (aExpiring.expiring && !bExpiring.expiring) return -1;
+      if (!aExpiring.expiring && bExpiring.expiring) return 1;
+      if (aExpiring.expiring && bExpiring.expiring) {
+        return aExpiring.daysLeft - bExpiring.daysLeft;
+      }
+
+      if (sortBy === "date") return b.start_date.localeCompare(a.start_date);
+      if (sortBy === "value") return b.total_value - a.total_value;
+      if (sortBy === "status") {
+        const order: Record<string, number> = { ACTIVE: 1, COMPLETED: 2 };
+        return (order[a.status] || 99) - (order[b.status] || 99);
+      }
+      return 0;
+    });
+  }, [baseContracts, typeFilter, statusFilter, sortBy]);
 
   const selectedTariffs = useMemo(() => {
     if (!selectedContract) return [];
@@ -878,6 +1114,27 @@ export function Contracts() {
             isLumpSum: false,
           },
         ],
+        adjustment: {
+		  mode: "FIXED",
+		  percentage: 0,
+		  effective_date: "",
+		  needs_review: false,
+		  review_note: "",
+		} as Adjustment,
+		
+        contract_modification: {
+		  percentage: 0,
+		} as ContractModification,
+		
+        guarantee: {
+          has_guarantee: false,
+          percentage: 0,
+          type: "BANK_GUARANTEE",
+        },
+        good_performance_percentage: 10,
+        insurance_deduction_percentage: 16.67,
+        attachments: [],
+		service_description: "",
       }));
       setAddErrors({});
     }
@@ -903,49 +1160,67 @@ export function Contracts() {
     exportToExcel(dataToExport, `${filterName}_Contracts_${today}`, "Contracts");
   };
 
-const handleAddClick = () => {
-  // 🔑 نوع قرارداد بر اساس فیلتر انتخابی تعیین میشه
-  const newType: "CONTRACT" | "WORK_ORDER" = typeFilter === "WORK_ORDER" ? "WORK_ORDER" : "CONTRACT";
-  const contractNo = generateContractNo(newType, contracts);
-  
-  setAddForm({
-    contract_no: contractNo,
-    external_contract_no: "",
-    source_type: "LETTER",
-    source_ref: "",
-    source_file: "",
-    source_file_object: null,
-    source_letter_date: "",
-    source_letter_image: "",
-    source_letter_image_object: null,
-    source_letter_image_preview: "",
-    source_email_from: "",
-    source_email_date: new Date().toISOString().split("T")[0],
-    client_id: "",
-    contract_title: "",
-    start_date: "",
-    end_date: "",
-    total_value: 0,
-    currency: "IRR",
-    status: "ACTIVE",
-    type: newType,  // 🔑 نوع داینامیک بر اساس فیلتر
-    contract_count: 1,
-    description: "",
-    tariffs: [
-      {
-        id: "1",
-        description: "",
-        unit: "MAN_DAY",
-        rate: "",
-        currency: "IRR",
-        total: 0,
-        isLumpSum: false,
+  const handleAddClick = () => {
+    const newType: "CONTRACT" | "WORK_ORDER" = typeFilter === "WORK_ORDER" ? "WORK_ORDER" : "CONTRACT";
+    const contractNo = generateContractNo(newType, contracts);
+    setAddForm({
+      contract_no: contractNo,
+      external_contract_no: "",
+      source_type: "LETTER",
+      source_ref: "",
+      source_file: "",
+      source_file_object: null,
+      source_letter_date: "",
+      source_letter_image: "",
+      source_letter_image_object: null,
+      source_letter_image_preview: "",
+      source_email_from: "",
+      source_email_date: new Date().toISOString().split("T")[0],
+      client_id: "",
+      contract_title: "",
+      start_date: "",
+      end_date: "",
+      total_value: 0,
+      currency: "IRR",
+      status: "ACTIVE",
+      type: newType,
+      contract_count: 1,
+      description: "",
+      tariffs: [
+        {
+          id: "1",
+          description: "",
+          unit: "MAN_DAY",
+          rate: "",
+          currency: "IRR",
+          total: 0,
+          isLumpSum: false,
+        },
+      ],
+      adjustment: {
+        enabled: false,
+        percentage: 0,
+        effective_date: "",
+        needs_review: false,
+        review_note: "",
       },
-    ],
-  });
-  setAddErrors({});
-  setIsAddModalOpen(true);
-};
+      
+	  contract_modification: {
+		  percentage: 0,
+		} as ContractModification,
+	  
+      guarantee: {
+        has_guarantee: false,
+        percentage: 0,
+        type: "BANK_GUARANTEE",
+      },
+      good_performance_percentage: 10,
+      insurance_deduction_percentage: 16.67,
+      attachments: [],
+    });
+    setAddErrors({});
+    setIsAddModalOpen(true);
+  };
 
   const validateAddForm = () => {
     const errors: any = {};
@@ -959,7 +1234,6 @@ const handleAddClick = () => {
       }
       if (!addForm.client_id) errors.client_id = "Client selection is required";
       if (!addForm.contract_title.trim()) errors.contract_title = "Work order title is required";
-
       if (!addForm.tariffs || addForm.tariffs.length === 0) {
         errors.tariffs = "At least one tariff line is required";
       } else {
@@ -987,12 +1261,45 @@ const handleAddClick = () => {
     const client = clients.find((c) => c.id === addForm.client_id);
     const newContract: Contract = {
       id: `ct${Date.now()}`,
-      ...addForm,
+      contract_no: addForm.contract_no,
+      external_contract_no: addForm.external_contract_no,
+      source_type: addForm.source_type,
+      source_ref: addForm.source_ref,
+      source_file: addForm.source_file,
+      source_file_object: addForm.source_file_object,
+      source_letter_date: addForm.source_letter_date,
+      source_letter_image: addForm.source_letter_image,
+      source_letter_image_object: addForm.source_letter_image_object,
+      source_letter_image_preview: addForm.source_letter_image_preview,
+      source_email_from: addForm.source_email_from,
+      source_email_date: addForm.source_email_date,
+      client_id: addForm.client_id,
       client_name: client?.name_en || "N/A",
+      contract_title: addForm.contract_title,
+      start_date: addForm.start_date,
+      end_date: addForm.end_date,
+      total_value: addForm.total_value,
       invoiced: 0,
+      currency: addForm.currency,
+      status: addForm.status,
+      type: addForm.type,
       tariffs: addForm.tariffs.length,
+      contract_count: addForm.contract_count,
       tariffLines: addForm.tariffs,
       department: CURRENT_DEPARTMENT,
+      description: addForm.description,
+      financial_terms: {
+		  adjustment: addForm.adjustment,
+		  contract_modification: addForm.contract_modification,
+		  guarantee: addForm.guarantee,
+		  good_performance_percentage: addForm.good_performance_percentage,
+		  insurance_deduction_percentage: addForm.insurance_deduction_percentage,
+		  attachments: addForm.attachments.map(att => ({
+			...att,
+			file_object: undefined,
+		  })),
+		},
+	  service_description: addForm.service_description,
     };
     setContracts([newContract, ...contracts]);
     setSelectedContract(newContract);
@@ -1112,102 +1419,99 @@ const handleAddClick = () => {
     <div className={`grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-4 p-3 lg:p-6 h-auto lg:h-[calc(100vh-140px)]`}>
       {/* LEFT PANEL */}
       <div className={`col-span-1 lg:col-span-4 relative flex flex-col rounded-xl panel-3d overflow-hidden transition-all duration-300 ease-in-out max-h-[50vh] lg:max-h-none ${
-        isDark ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200/70"
+        isDark ? `bg-slate-900 border-slate-700` : `bg-white border-slate-200/70`
       }`}>
         <div className={`relative z-10 border-b px-4 py-4 space-y-3 ${
-          isDark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/50"
+          isDark ? `border-slate-700 bg-slate-800/50` : `border-slate-100 bg-slate-50/50`
         }`}>
-          <div className="flex items-center gap-3"> 
-			  <div className="relative flex-1">
-				<span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">🔍</span>
-				<input
-				  type="text"
-				  value={searchQuery}
-				  onChange={(e) => setSearchQuery(e.target.value)}
-				  placeholder="Search by contract no, client, title..."
-				  className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
-				/>
-				{searchQuery && (
-				  <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-primary">✕</button>
-				)}
-			  </div>
-			  {/* 🔑 دکمه Sort کنار سرچ */}
-			  <div className="relative">
-				<select
-				  value={sortBy}
-				  onChange={(e) => setSortBy(e.target.value as "date" | "value" | "status")}
-				  className="appearance-none text-xs rounded-md pl-2 pr-6 py-2 font-medium cursor-pointer input-themed"
-				>
-				  <option value="date">Latest First</option>
-				  <option value="value">Highest Value</option>
-				  <option value="status">By Status</option>
-				</select>
-				<span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
-			  </div>
-			</div>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">🔍</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by Contract No, ..."
+                className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-primary">✕</button>
+              )}
+            </div>
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "date" | "value" | "status")}
+                className="appearance-none text-xs rounded-md pl-2 pr-6 py-2 font-medium cursor-pointer input-themed"
+              >
+                <option value="date">Latest First</option>
+                <option value="value">Highest Value</option>
+                <option value="status">By Status</option>
+              </select>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none text-[10px]">▼</span>
+            </div>
+          </div>
 
-          {/* 🔑 ردیف فیلتر نوع قرارداد */}
-			<div className={`flex gap-1 rounded-lg border p-0.5 text-xs ${
-			  isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
-			}`}>
-			  {(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => {
-				const count = t === "ALL" ? contracts.length : t === "CONTRACT" ? contracts.filter(c => c.type === "CONTRACT").length : contracts.filter(c => c.type === "WORK_ORDER").length;
-				return (
-				  <button
-					key={t}
-					onClick={() => setTypeFilter(t)}
-					className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
-					  typeFilter === t
-						? (isDark 
-							? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500" 
-							: "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm")
-						: (isDark 
-							? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" 
-							: "text-slate-500 hover:text-slate-700 hover:bg-slate-50")
-					}`}
-				  >
-					{t === "ALL" ? `All (${count})` : t === "CONTRACT" ? `📄 (${count})` : `📦(${count})`}
-				  </button>
-				);
-			  })}
-			</div>
+          <div className={`flex gap-1 rounded-lg border p-0.5 text-xs ${
+            isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
+          }`}>
+            {(["ALL", "CONTRACT", "WORK_ORDER"] as const).map((t) => {
+              const count = t === "ALL" ? contracts.length : t === "CONTRACT" ? contracts.filter(c => c.type === "CONTRACT").length : contracts.filter(c => c.type === "WORK_ORDER").length;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
+                    typeFilter === t
+                      ? (isDark 
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500" 
+                          : "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm")
+                      : (isDark 
+                          ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" 
+                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50")
+                  }`}
+                >
+                  {t === "ALL" ? `All (${count})` : t === "CONTRACT" ? `📄 (${count})` : `📦(${count})`}
+                </button>
+              );
+            })}
+          </div>
 
-			{/* 🔑 ردیف دوم: فیلتر وضعیت قرارداد (۴ وضعیت) */}
-			<div className={`flex gap-1 rounded-lg border p-1 text-xs ${
-			  isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
-			}`}>
-			  {(["ALL", "ACTIVE", "NOT_STARTED", "NEEDS_REVIEW", "COMPLETED"] as const).map((t) => {
-				const baseFiltered = typeFilter === "ALL" ? contracts : contracts.filter(c => c.type === typeFilter);
-				let count = 0;
-				if (t === "ALL") count = baseFiltered.length;
-				else if (t === "ACTIVE") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "active").length;
-				else if (t === "NOT_STARTED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "not_started").length;
-				else if (t === "NEEDS_REVIEW") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "needs_review").length;
-				else if (t === "COMPLETED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "completed").length;
-				
-				return (
-				  <button
-					key={t}
-					onClick={() => setStatusFilter(t)}
-					className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
-					  statusFilter === t
-						? (isDark 
-							? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30 border border-emerald-500" 
-							: "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm")
-						: (isDark 
-							? "text-slate-300 hover:text-slate-100 hover:bg-slate-700" 
-							: "text-slate-600 hover:text-slate-900 hover:bg-slate-50")
-					}`}
-				  >
-					{t === "ALL" ? `All (${count})` : 
-					 t === "ACTIVE" ? `🟢 (${count})` : 
-					 t === "NOT_STARTED" ? `⏳ (${count})` : 
-					 t === "NEEDS_REVIEW" ? `⚠️ (${count})` : 
-					 `✓ (${count})`}
-				  </button>
-				);
-			  })}
-			</div>
+          <div className={`flex gap-1 rounded-lg border p-1 text-xs ${
+            isDark ? "border-slate-700 bg-slate-800" : "border-slate-200 bg-white"
+          }`}>
+            {(["ALL", "ACTIVE", "NOT_STARTED", "NEEDS_REVIEW", "COMPLETED"] as const).map((t) => {
+              const baseFiltered = typeFilter === "ALL" ? contracts : contracts.filter(c => c.type === typeFilter);
+              let count = 0;
+              if (t === "ALL") count = baseFiltered.length;
+              else if (t === "ACTIVE") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "active").length;
+              else if (t === "NOT_STARTED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "not_started").length;
+              else if (t === "NEEDS_REVIEW") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "needs_review").length;
+              else if (t === "COMPLETED") count = baseFiltered.filter(c => getContractFinancialStatus(c) === "completed").length;
+              
+              return (
+                <button
+                  key={t}
+                  onClick={() => setStatusFilter(t)}
+                  className={`flex-1 rounded px-1 py-1.5 font-medium transition-all whitespace-nowrap ${
+                    statusFilter === t
+                      ? (isDark 
+                          ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30 border border-emerald-500" 
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm")
+                      : (isDark 
+                          ? "text-slate-300 hover:text-slate-100 hover:bg-slate-700" 
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50")
+                  }`}
+                >
+                  {t === "ALL" ? `All (${count})` : 
+                   t === "ACTIVE" ? `🟢 (${count})` : 
+                   t === "NOT_STARTED" ? `⏳ (${count})` : 
+                   t === "NEEDS_REVIEW" ? `⚠️ (${count})` : 
+                   `✓ (${count})`}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto pb-24">
@@ -1241,74 +1545,128 @@ const handleAddClick = () => {
                       <div className="text-xs text-secondary truncate">{contract.client_name}</div>
                     </div>
                     {(() => {
-					  const financialStatus = getContractFinancialStatus(contract);
-					  
-					  if (contract.status === "COMPLETED") {
-						return <Badge tone="slate">✓ Completed</Badge>;
-					  }
-					  
-					  if (financialStatus === "not_started") {
-						const daysUntilStart = getDaysUntilStart(contract.start_date);
-						return (
-						  <Badge tone="amber" className="gap-1">
-							<span>⏳</span>
-							<span>Not Started</span>
-						  </Badge>
-						);
-					  }
-					  
-					  if (financialStatus === "needs_review") {
-						return (
-						  <Badge tone="amber" className="gap-1">
-							<span>⚠️</span>
-							<span>Needs Review</span>
-						  </Badge>
-						);
-					  }
-					  
-					  return <Badge tone="emerald">🟢 Active</Badge>;
-					})()}
+                      const financialStatus = getContractFinancialStatus(contract);
+                      const expiringInfo = isExpiringSoon(contract);
+                      
+                      if (contract.status === "COMPLETED") {
+                        return <Badge tone="slate">✓ Completed</Badge>;
+                      }
+                      
+                      if (expiringInfo.expiring) {
+                        return (
+                          <Badge tone="danger" className="gap-1 animate-pulse">
+                            <span>⚠️</span>
+                            <span>Expiring Soon</span>
+                          </Badge>
+                        );
+                      }
+                      
+                      if (financialStatus === "not_started") {
+                        const daysUntilStart = getDaysUntilStart(contract.start_date);
+                        return (
+                          <Badge tone="amber" className="gap-1">
+                            <span>⏳</span>
+                            <span>Not Started</span>
+                          </Badge>
+                        );
+                      }
+                      
+                      if (financialStatus === "needs_review") {
+                        return (
+                          <Badge tone="amber" className="gap-1">
+                            <span>⚠️</span>
+                            <span>Needs Review</span>
+                          </Badge>
+                        );
+                      }
+                      
+                      return <Badge tone="emerald">🟢 Active</Badge>;
+                    })()}
                   </div>
+                  
                   <div className="flex items-center justify-between text-xs">
-					  <span className="text-secondary" dir="rtl">{contract.start_date} → {contract.end_date}</span>
-					  <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
-					</div>
+                    <span className="text-secondary">{contract.start_date} → {contract.end_date}</span>
+                    <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
+                  </div>
 
-					{(() => {
-					  const financialStatus = getContractFinancialStatus(contract);
-					  
-					  // اگه قرارداد هنوز شروع نشده
-					  if (financialStatus === "not_started") {
-						const daysUntilStart = getDaysUntilStart(contract.start_date);
-						return (
-						  <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
-							isDark ? "border-amber-700 bg-amber-900/20 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"
-						  }`}>
-							<div className="flex items-center gap-2">
-							  <span></span>
-							  <span className="font-medium">Starts in {daysUntilStart} days</span>
-							</div>
-							
-						  </div>
-						);	
-					  }
-					  
-					  // در غیر این صورت پروگرس بار معمولی
-					  return (
-						<div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
-						  {(() => {
-							const progress = calculateProgressFromTariffs(contract);
-							return (
-							  <div
-								className={`h-full rounded-full ${getProgressColor(progress)}`}
-								style={{ width: `${Math.min(progress, 100)}%` }}
-							  />
-							);
-						  })()}
-						</div>
-					  );
-					})()}
+                  {(() => {
+                    const financialStatus = getContractFinancialStatus(contract);
 					
+					  // 🔑 اگه قرارداد Completed هست
+					  if (contract.status === "COMPLETED" || financialStatus === "completed") {
+						return (
+						  <div className="mt-1">
+							<div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
+							  <div
+								className={`h-full rounded-full transition-all duration-500 ${
+								  isDark ? "bg-slate-500" : "bg-slate-400"
+								}`}
+								style={{ width: "100%" }}
+							  />
+							</div>
+							<div className="flex items-center justify-between mt-1 text-[10px]">
+							  <span className={isDark ? "text-slate-400" : "text-slate-500"}>
+								Time Progress
+							  </span>
+							  <span className={`font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+								✓ Completed
+							  </span>
+							</div>
+						  </div>
+						);
+					  }
+					
+                    if (financialStatus === "not_started") {
+                      const daysUntilStart = getDaysUntilStart(contract.start_date);
+                      return (
+                        <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+                          isDark ? "border-amber-700 bg-amber-900/20 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            <span>⏳</span>
+                            <span className="font-medium">Starts in {daysUntilStart} days</span>
+                          </div>
+                          <div className="text-[10px] mt-1 opacity-75">No work performed yet</div>
+                        </div>
+                      );
+                    }
+                    
+                    const daysProgress = calculateDaysProgress(contract);
+                    const daysLeft = calculateDaysLeft(contract.end_date);
+                    const isExpired = daysLeft < 0;
+                    
+                    return (
+                      <div className="mt-1">
+                        <div className={`h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${getDaysProgressColor(daysProgress)}`}
+                            style={{ width: `${Math.min(daysProgress, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-1 text-[10px]">
+                          <span className={isDark ? "text-slate-400" : "text-slate-500"}>
+                            Time Progress
+                          </span>
+                          <span className={`font-semibold ${
+                            isExpired 
+                              ? (isDark ? "text-rose-400" : "text-rose-600")
+                              : daysLeft <= 30 
+                                ? (isDark ? "text-amber-400" : "text-amber-600")
+                                : (isDark ? "text-emerald-400" : "text-emerald-600")
+                          }`}>
+                            {isExpired 
+                              ? `${Math.abs(daysLeft)} days overdue` 
+                              : daysLeft === 0 
+                                ? "Expires today" 
+                                : `${daysLeft} days left`}
+                            <span className={`ml-1 ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                              ({daysProgress.toFixed(0)}%)
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })
@@ -1316,40 +1674,40 @@ const handleAddClick = () => {
         </div>
 
         <div className={`absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t pointer-events-none z-10 ${
-		  isDark 
-			? "from-slate-900 via-slate-900/95 to-slate-900/0" 
-			: "from-white via-white/95 to-white/0"
-		}`} />
-		<div className="absolute bottom-5 left-0 right-0 px-4 z-20 flex gap-2">
-		  <Button
-			variant="primary"
-			size="md"
-			onClick={handleAddClick}
-			className={`w-full justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
-			  isDark 
-				? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
-				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
-			}`}
-		  >
-			<span>➕</span> 
-			{typeFilter === "ALL" ? "Add New Agreement" : 
-			 typeFilter === "CONTRACT" ? "Add New Contract" : 
-			 "Add New Work Order"}
-		  </Button>
-		  <Button
-			variant="secondary"
-			size="md"
-			onClick={handleExportToExcel}
-			className={`transition-all duration-300 hover:-translate-y-0.5 ${
-			  isDark 
-				? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
-				: "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
-			}`}
-			title="Export to Excel"
-		  >
-			📥
-		  </Button>
-		</div>
+          isDark 
+            ? "from-slate-900 via-slate-900/95 to-slate-900/0" 
+            : "from-white via-white/95 to-white/0"
+        }`} />
+        <div className="absolute bottom-5 left-0 right-0 px-4 z-20 flex gap-2">
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleAddClick}
+            className={`w-full justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
+              isDark 
+                ? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
+                : "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
+            }`}
+          >
+            <span>➕</span> 
+            {typeFilter === "ALL" ? "Add New Agreement" : 
+             typeFilter === "CONTRACT" ? "Add New Contract" : 
+             "Add New Work Order"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleExportToExcel}
+            className={`transition-all duration-300 hover:-translate-y-0.5 ${
+              isDark 
+                ? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
+                : "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
+            }`}
+            title="Export to Excel"
+          >
+            📥
+          </Button>
+        </div>
       </div>
 
       {/* RIGHT PANEL */}
@@ -1385,58 +1743,131 @@ const handleAddClick = () => {
                         {selectedContract.type === "CONTRACT" ? "📄 Contract" : "📦 Work Order"}
                       </Badge>
                       {(() => {
-  const financialStatus = getContractFinancialStatus(selectedContract);
-  
-  if (selectedContract.status === "COMPLETED") {
-    return <Badge tone="slate">✓ Completed</Badge>;
-  }
-  
-  if (financialStatus === "not_started") {
-    const daysUntilStart = getDaysUntilStart(selectedContract.start_date);
-    return (
-      <Badge tone="amber" className="gap-1">
-        <span>⏳</span>
-        <span>Not Started ({daysUntilStart}d)</span>
-      </Badge>
-    );
-  }
-  
-  if (financialStatus === "needs_review") {
-    const reviewType = getNeedsReviewType(selectedContract);
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Badge tone="amber" className="gap-1">
-            <span>⚠️</span>
-            <span>{reviewType.message}</span>
-          </Badge>
-          {userRole === "admin" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRequestComplete(selectedContract)}
-              className={`gap-1 text-xs ${
-                isDark ? "border-amber-600 text-amber-300 hover:bg-amber-900/30" : "border-amber-300 text-amber-700 hover:bg-amber-50"
-              }`}
-            >
-              <span>✓</span>
-              <span>Mark as Completed</span>
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-  
-  return <Badge tone="emerald">🟢 Active</Badge>;
-})()}
+                        const financialStatus = getContractFinancialStatus(selectedContract);
+                        const expiringInfo = isExpiringSoon(selectedContract);
+                        
+                        if (selectedContract.status === "COMPLETED") {
+                          return <Badge tone="slate">✓ Completed</Badge>;
+                        }
+                        
+                        if (financialStatus === "needs_review") {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <Badge tone="amber" className="gap-1">
+                                <span>⚠️</span>
+                                <span>Needs Financial Review</span>
+                              </Badge>
+                              {userRole === "admin" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRequestComplete(selectedContract)}
+                                  className={`gap-1 text-xs ${
+                                    isDark ? "border-amber-600 text-amber-300 hover:bg-amber-900/30" : "border-amber-300 text-amber-700 hover:bg-amber-50"
+                                  }`}
+                                >
+                                  <span>✓</span>
+                                  <span>Mark as Completed</span>
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <div className="flex items-center gap-2">
+                            <Badge tone="emerald">🟢 Active</Badge>
+                            {expiringInfo.expiring && (
+                              <Badge tone="danger" className="gap-1 animate-pulse">
+                                <span>⚠️</span>
+                                <span>Expiring in {expiringInfo.daysLeft} days</span>
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
-                <Button variant="outline" size="md" onClick={handleEditClick} className="gap-2 shadow-sm">
-                  <span>✏️</span> Edit</Button>
+                <Button 
+				  variant="outline" 
+				  size="md" 
+				  onClick={handleEditClick} 
+				  disabled={selectedContract?.status === "COMPLETED" || getContractFinancialStatus(selectedContract) === "completed"}
+				  className={`gap-2 shadow-sm ${
+					(selectedContract?.status === "COMPLETED" || getContractFinancialStatus(selectedContract) === "completed")
+					  ? "opacity-50 cursor-not-allowed"
+					  : ""
+				  }`}
+				  title={
+					(selectedContract?.status === "COMPLETED" || getContractFinancialStatus(selectedContract) === "completed")
+					  ? "Completed contracts cannot be edited"
+					  : "Edit contract"
+				  }
+				>
+				  <span>✏️</span> Edit
+				</Button>
               </div>
             </div>
+			
+			{/* 🔑 یادآوری تعدیل قرارداد (۳۰ روز قبل از تاریخ اعمال) */}
+			{(() => {
+			  const reminder = getAdjustmentReminder(selectedContract);
+			  if (!reminder.show) return null;
+
+			  return (
+				<div className={`rounded-lg border-2 p-4 ${
+				  reminder.mode === "TBD"
+					? (isDark ? "border-amber-600 bg-amber-950/40" : "border-amber-400 bg-amber-50")
+					: (isDark ? "border-indigo-600 bg-indigo-950/40" : "border-indigo-400 bg-indigo-50")
+				}`}>
+				  <div className="flex items-start gap-3">
+					<div className="text-2xl">
+					  {reminder.mode === "TBD" ? "⏳" : "📊"}
+					</div>
+					<div className="flex-1">
+					  <h4 className={`text-sm font-bold mb-1 ${
+						reminder.mode === "TBD"
+						  ? (isDark ? "text-amber-200" : "text-amber-900")
+						  : (isDark ? "text-indigo-200" : "text-indigo-900")
+					  }`}>
+						Price Adjustment Reminder
+					  </h4>
+					  <p className={`text-xs mb-2 ${
+						reminder.mode === "TBD"
+						  ? (isDark ? "text-amber-300" : "text-amber-800")
+						  : (isDark ? "text-indigo-300" : "text-indigo-800")
+					  }`}>
+						{reminder.mode === "TBD" 
+						  ? `Adjustment percentage needs to be determined. Effective date: ${reminder.effectiveDate}`
+						  : `Adjustment will be applied. Effective date: ${reminder.effectiveDate}`
+						}
+					  </p>
+					  <div className="flex items-center gap-4 text-xs">
+						<div>
+						  <span className={isDark ? "text-slate-400" : "text-slate-600"}>Days until effective: </span>
+						  <span className={`font-bold ${
+							reminder.daysUntil <= 7
+							  ? "text-rose-500"
+							  : reminder.daysUntil <= 15
+								? "text-amber-500"
+								: "text-emerald-500"
+						  }`}>
+							{reminder.daysUntil} days
+						  </span>
+						</div>
+						{reminder.mode === "FIXED" && reminder.percentage > 0 && (
+						  <div>
+							<span className={isDark ? "text-slate-400" : "text-slate-600"}>Percentage: </span>
+							<span className="font-bold text-indigo-500">{reminder.percentage}%</span>
+						  </div>
+						)}
+					  </div>
+					</div>
+				  </div>
+				</div>
+			  );
+			})()}
 
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-6">
@@ -1622,7 +2053,7 @@ const handleAddClick = () => {
                   ) : (
                     <div className={`overflow-x-auto rounded-lg border border-theme`}>
                       <table className="w-full text-left text-xs">
-                        <thead className={`bg-muted text-[10px] uppercase tracking-wide text-secondary`}>
+                        <thead className={`bg-muted text-[9px] uppercase tracking-wide text-secondary`}>
                           <tr>
                             <th className="px-3 py-2 font-medium">Description</th>
                             <th className="px-3 py-2 font-medium">Unit</th>
@@ -1639,7 +2070,7 @@ const handleAddClick = () => {
                             return (
                               <tr key={tariff.id} className={isDark ? "hover:bg-muted/60" : "hover:bg-muted/60"}>
                                 <td className={`px-3 py-2 font-medium text-primary`}>{tariff.description}</td>
-                                <td className="px-3 py-2"><Badge tone="indigo">{tariff.unit.replace("_", " ")}</Badge></td>
+                                <td className="px-3 py-2 text-[9px]"> <Badge tone="indigo">{tariff.unit.replace("_", " ")}</Badge> </td>
                                 <td className="px-3 py-2 text-right font-mono">{formatCurrency(tariff.rate, selectedContract.currency)}</td>
                                 <td className="px-3 py-2 text-center font-mono">{tariff.consumed_quantity}</td>
                                 <td className="px-3 py-2 text-right font-mono font-semibold text-accent-emerald">{formatCurrency(value, selectedContract.currency)}</td>
@@ -1715,162 +2146,541 @@ const handleAddClick = () => {
 
       {/* ADD CONTRACT MODAL */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Agreement" size="lg">
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
-			  <label className="mb-1.5 block text-xs font-semibold text-primary">
-				Type *
-				{typeFilter !== "ALL" && (
-				  <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-amber-400" : "text-amber-600"}`}>
-					🔒 Locked to {typeFilter === "CONTRACT" ? "Contract" : "Work Order"}
-				  </span>
-				)}
-			  </label>
-			  <div className="flex gap-2">
-				<button
-				  type="button"
-				  onClick={() => typeFilter === "ALL" && handleTypeChange("CONTRACT")}
-				  disabled={typeFilter !== "ALL"}
-				  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-					addForm.type === "CONTRACT"
-					  ? "bg-indigo-600 text-white shadow-md"
-					  : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
-				  } ${typeFilter !== "ALL" && addForm.type !== "CONTRACT" ? "opacity-40 cursor-not-allowed" : ""}`}
-				>
-				  📄 Contract
-				</button>
-				<button
-				  type="button"
-				  onClick={() => typeFilter === "ALL" && handleTypeChange("WORK_ORDER")}
-				  disabled={typeFilter !== "ALL"}
-				  className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-					addForm.type === "WORK_ORDER"
-					  ? "bg-amber-600 text-white shadow-md"
-					  : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
-				  } ${typeFilter !== "ALL" && addForm.type !== "WORK_ORDER" ? "opacity-40 cursor-not-allowed" : ""}`}
-				>
-				  📦 Work Order
-				</button>
-			  </div>
-			</div>
-
-          <div className={`rounded-lg border border-theme bg-muted p-3`}>
-            <label className="mb-1.5 block text-xs font-semibold text-primary">Internal Contract No (ICS)</label>
-            <div className={`w-full rounded-lg border border-theme bg-card py-2.5 px-3 text-sm font-mono font-semibold text-primary`}>
-              {addForm.contract_no}
+            <label className="mb-1.5 block text-xs font-semibold text-primary">
+              Type *
+              {typeFilter !== "ALL" && (
+                <span className={`ml-2 text-[10px] font-normal ${isDark ? "text-amber-400" : "text-amber-600"}`}>
+                  🔒 Locked to {typeFilter === "CONTRACT" ? "Contract" : "Work Order"}
+                </span>
+              )}
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => typeFilter === "ALL" && handleTypeChange("CONTRACT")}
+                disabled={typeFilter !== "ALL"}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  addForm.type === "CONTRACT"
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
+                } ${typeFilter !== "ALL" && addForm.type !== "CONTRACT" ? "opacity-40 cursor-not-allowed" : ""}`}
+              >
+                📄 Contract
+              </button>
+              <button
+                type="button"
+                onClick={() => typeFilter === "ALL" && handleTypeChange("WORK_ORDER")}
+                disabled={typeFilter !== "ALL"}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                  addForm.type === "WORK_ORDER"
+                    ? "bg-amber-600 text-white shadow-md"
+                    : (isDark ? "bg-muted text-secondary hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200")
+                } ${typeFilter !== "ALL" && addForm.type !== "WORK_ORDER" ? "opacity-40 cursor-not-allowed" : ""}`}
+              >
+                📦 Work Order
+              </button>
             </div>
-            <p className="text-[10px] text-secondary mt-1">Auto-generated, unique per department</p>
           </div>
 
           {addForm.type === "CONTRACT" ? (
             <>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-primary">Contract Count *</label>
-                <input
-                  type="number"
-                  value={addForm.contract_count || ""}
-                  onChange={(e) => setAddForm({ ...addForm, contract_count: Math.max(1, Number(e.target.value)) })}
-                  className={`w-full rounded-lg px-3 py-2 text-sm input-themed ${
-                    addErrors.contract_count ? "border-rose-300" : ""
-                  }`}
-                  placeholder="1"
-                  min="1"
-                />
-                {addErrors.contract_count && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.contract_count}</p>}
-              </div>
+			<div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/50"} space-y-1`}>
+			  <div className="grid grid-cols-3 gap-4">
+			  {/* 🔑  انتخاب مشتری */}
+				<div>
+				  <ClientSelectorModal
+					value={addForm.client_id}
+					onChange={(clientId) => setAddForm({ ...addForm, client_id: clientId })}
+					onAddNew={handleNavigateToClients}
+					error={addErrors.client_id}
+				  />
+				</div>
+				
+				{/* 🔑 عنوان قرارداد */}
+				<div>
+				  <label className="mb-1.5 block text-xs font-semibold text-primary">Contract Title *</label>
+				  <input
+					value={addForm.contract_title}
+					onChange={(e) => setAddForm({ ...addForm, contract_title: e.target.value })}
+					className={`w-full rounded-lg px-3 py-2 text-sm input-themed ${
+					  addErrors.contract_title ? "border-rose-300" : ""
+					}`}
+					placeholder="e.g., South Pars Phase 22 — Inspection Services"
+				  />
+				  {addErrors.contract_title && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.contract_title}</p>}
+				</div>
+				
+				{/* 🔑 شرح خدمات - Dropdown */}
+				<div>
+				  <label className="mb-1.5 block text-xs font-semibold text-primary">Service Description *</label>
+				  <select
+					value={addForm.service_description}
+					onChange={(e) => setAddForm({ ...addForm, service_description: e.target.value as any })}
+					className={`w-full rounded-lg px-3 py-2 text-sm input-themed ${
+					  !addForm.service_description ? "text-muted" : ""
+					}`}
+				  >
+					<option value="">Select service type...</option>
+					<option value="TPI">🔍 TPI - Third Party Inspection</option>
+					<option value="MWS">🔧 MWS - Marine Warranty Survey</option>
+					<option value="TPER">📊 TPER - Technical Performance Evaluation Report</option>
+					<option value="OTHER">📋 Other</option>
+				  </select>
+				</div>
+			  </div>
+			</div>
+			
+			{/* 🔑مبلغ+ ارز+ تاریخ شروع + پایان */}
+			<div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/50"}`}>
+			  <div className="grid grid-cols-4 gap-4">
+				  <div>
+					<label className="mb-1.5 block text-xs font-semibold text-primary">Start Date *</label>
+					<JalaaliDatePicker
+					  value={addForm.start_date}
+					  onChange={(date) => {
+						// 🔑 اگه Adjustment فعاله و effective_date خالیه، پیش‌فرض ست کن
+						let effectiveDate = addForm.adjustment.effective_date;
+						if (addForm.adjustment.enabled && !effectiveDate && date) {
+						  effectiveDate = getNextJalaaliYearStart(date);
+						}
+						
+						setAddForm({ 
+						  ...addForm, 
+						  start_date: date,
+						  adjustment: {
+							...addForm.adjustment,
+							effective_date: effectiveDate
+						  }
+						});
+					  }}
+					  placeholder="Select start date"
+					/>
+					{addErrors.start_date && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.start_date}</p>}
+				  </div>
+				  <div>
+					<label className="mb-1.5 block text-xs font-semibold text-primary">End Date *</label>
+					<JalaaliDatePicker
+					  value={addForm.end_date}
+					  onChange={(date) => handleSmartEndDateChange(date, setAddForm, addForm)}
+					  minDate={addForm.start_date}
+					  placeholder={addForm.start_date ? "Select end date" : "Select start date first"}
+					  disabled={!addForm.start_date}
+					/>
+					{addErrors.end_date && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.end_date}</p>}
+					{addForm.start_date && !addForm.end_date && (
+					  <p className={`mt-1 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+						Must be on or after {addForm.start_date}
+					  </p>
+					)}
+				  </div>
+				  <div>
+					<label className="mb-1.5 block text-xs font-semibold text-primary">Total Value *</label>
+					<input
+					  type="text"
+					  inputMode="numeric"
+					  value={addForm.total_value ? formatNumberInput(String(addForm.total_value)) : ""}
+					  onChange={(e) => setAddForm({ ...addForm, total_value: parseNumberInput(e.target.value) })}
+					  className={`w-full rounded-lg px-3 py-2 text-sm font-mono text-right input-themed ${
+						addErrors.total_value ? "border-rose-300" : ""
+					  }`}
+					  placeholder="0"
+					/>
+					{addErrors.total_value && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.total_value}</p>}
+				  </div>
+				  <div>
+					<label className="mb-1.5 block text-xs font-semibold text-primary">Currency</label>
+					<select
+					  value={addForm.currency}
+					  onChange={(e) => setAddForm({ ...addForm, currency: e.target.value })}
+					  className="w-full rounded-lg px-3 py-2 text-sm input-themed"
+					>
+					  <option value="IRR">IRR</option>
+					  <option value="USD">USD</option>
+					  <option value="EUR">EUR</option>
+					</select>
+				  </div> 
+			  </div>
+			</div>
+			
+			  {/* 🔑 شماره قرارداد داخلی + خارجی */}
+			<div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/50"}`}>
+			  <div className="grid grid-cols-2 gap-4">
+				<div>
+				  <label className="mb-1.5 block text-xs font-semibold text-primary">Internal Contract No. (ICS)</label>
+				  <div className={`w-full rounded-lg border border-theme bg-card py-2.5 px-3 text-sm font-mono font-semibold text-primary`}>
+					{addForm.contract_no}
+				  </div>
+				  <p className="text-[10px] text-secondary mt-1">Auto-generated, Unique per ICS Department</p>
+				</div>
+				<div>
+				  <label className="mb-1.5 block text-xs font-semibold text-primary">External Contract No (Optional)</label>
+				  <input
+					value={addForm.external_contract_no}
+					onChange={(e) => setAddForm({ ...addForm, external_contract_no: e.target.value })}
+					className={`w-full rounded-lg border border-theme bg-card py-2.5 px-3 text-sm font-mono font-semibold text-primary`}
+					placeholder="Client's Contract No."
+				  />
+				</div>
+			  </div>
+			</div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">External Contract No (Optional)</label>
-                  <input
-                    value={addForm.external_contract_no}
-                    onChange={(e) => setAddForm({ ...addForm, external_contract_no: e.target.value })}
-                    className="w-full rounded-lg px-3 py-2 text-sm font-mono input-themed"
-                    placeholder="Client's contract number"
-                  />
-                </div>
-                <div>
-                  <ClientSelectorModal
-                    value={addForm.client_id}
-                    onChange={(clientId) => setAddForm({ ...addForm, client_id: clientId })}
-                    onAddNew={handleNavigateToClients}
-                    error={addErrors.client_id}
-                  />
-                </div>
-              </div>
+              {/* 🔑 بخش شرایط مالی و حقوقی */}
+			  
+             <div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/50"}`}>
+				<h3 className={`text-sm font-bold mb-4 flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+					💼 Financial & Legal Terms
+                </h3>
 
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-primary">Contract Title *</label>
-                <input
-                  value={addForm.contract_title}
-                  onChange={(e) => setAddForm({ ...addForm, contract_title: e.target.value })}
-                  className={`w-full rounded-lg px-3 py-2 text-sm input-themed ${
-                    addErrors.contract_title ? "border-rose-300" : ""
-                  }`}
-                  placeholder="e.g., South Pars Phase 22 — TPI"
-                />
-                {addErrors.contract_title && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.contract_title}</p>}
-              </div>
+                <div className="space-y-2">
+                  {/* ۱. تعدیل قرارداد */}
+				  <div className="grid grid-cols-2 gap-3">
+					<div className={`rounded-lg border p-4 ${
+					  addForm.adjustment.enabled
+						? (isDark ? "border-indigo-700 bg-indigo-950/30" : "border-indigo-200 bg-indigo-50/30")
+						: (isDark ? "border-slate-700 bg-slate-800/20" : "border-slate-200 bg-slate-50/20")
+					}`}>
+					  <div className="flex items-center justify-between mb-3">
+						<div className="flex items-center gap-2">
+						  <span className="text-base">📊</span>
+						  <h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+							Price Adjustment
+						  </h4>
+						</div>
+						<button
+						  type="button"
+						  onClick={() => {
+							const newEnabled = !addForm.adjustment.enabled;
+							// 🔑 اگه فعال شد و تاریخ effective خالیه، پیش‌فرض ست کن
+							const effectiveDate = newEnabled && !addForm.adjustment.effective_date && addForm.start_date
+							  ? getNextJalaaliYearStart(addForm.start_date)
+							  : addForm.adjustment.effective_date;
+							
+							setAddForm({
+							  ...addForm,
+							  adjustment: { 
+								...addForm.adjustment, 
+								enabled: newEnabled,
+								effective_date: effectiveDate
+							  }
+							});
+						  }}
+						  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+							addForm.adjustment.enabled ? "bg-indigo-600" : (isDark ? "bg-slate-700" : "bg-slate-300")
+						  }`}
+						>
+						  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+							addForm.adjustment.enabled ? "translate-x-6" : "translate-x-1"
+						  }`} />
+						</button>
+					  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">Start Date *</label>
-                  <JalaaliDatePicker
-                    value={addForm.start_date}
-                    onChange={(date) => setAddForm({ ...addForm, start_date: date })}
-                    placeholder="Select start date"
-                  />
-                  {addErrors.start_date && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.start_date}</p>}
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">End Date *</label>
-                  <JalaaliDatePicker
-                    value={addForm.end_date}
-                    onChange={(date) => setAddForm({ ...addForm, end_date: date })}
-                    minDate={addForm.start_date}
-                    placeholder="Select end date"
-                  />
-                  {addErrors.end_date && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.end_date}</p>}
-                </div>
-              </div>
+					  {addForm.adjustment.enabled && (
+						<div className="space-y-3">
+						  {/* انتخاب حالت: FIXED یا TBD */}
+						  <div className={`rounded-lg border p-3 ${
+							isDark ? "border-slate-700 bg-slate-800/30" : "border-slate-200 bg-slate-50/30"
+						  }`}>
+							<label className={`mb-2 block text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+							  Adjustment Mode
+							</label>
+							<div className="flex gap-2">
+							  <button
+								type="button"
+								onClick={() => setAddForm({
+								  ...addForm,
+								  adjustment: { ...addForm.adjustment, mode: "FIXED" }
+								})}
+								className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+								  addForm.adjustment.mode === "FIXED"
+									? "bg-indigo-600 text-white shadow-md"
+									: (isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300")
+								}`}
+							  >
+								✅ Fixed
+							  </button>
+							  <button
+								type="button"
+								onClick={() => setAddForm({
+								  ...addForm,
+								  adjustment: { ...addForm.adjustment, mode: "TBD", percentage: 0 }
+								})}
+								className={`flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+								  addForm.adjustment.mode === "TBD"
+									? "bg-amber-600 text-white shadow-md"
+									: (isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300")
+								}`}
+							  >
+								⏳ TBD
+							  </button>
+							</div>
+						  </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">Total Value *</label>
-                  <input
-                    type="number"
-                    value={addForm.total_value || ""}
-                    onChange={(e) => setAddForm({ ...addForm, total_value: Number(e.target.value) })}
-                    className={`w-full rounded-lg px-3 py-2 text-sm input-themed ${
-                      addErrors.total_value ? "border-rose-300" : ""
-                    }`}
-                    placeholder="0"
-                  />
-                  {addErrors.total_value && <p className="mt-1 text-[11px] font-medium text-rose-600">✕ {addErrors.total_value}</p>}
+						  <div className="grid grid-cols-2 gap-3">
+							{/* فیلد درصد - فقط وقتی FIXED هست فعاله */}
+							<div>
+							  <label className={`mb-1 block text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+								Percentage (%)
+							  </label>
+							  <input
+								  type="text"
+								  inputMode="decimal"
+								  value={addForm.adjustment.percentage ? formatNumberInput(String(addForm.adjustment.percentage)) : ""}
+								  onChange={(e) => setAddForm({
+									...addForm,
+									adjustment: { ...addForm.adjustment, percentage: parseNumberInput(e.target.value) }
+								  })}
+								  className="w-full rounded-lg border px-3 py-2 text-sm font-mono text-right input-themed"
+								  placeholder="0.00"
+								/>
+							</div>
+
+							{/* فیلد تاریخ - همیشه فعاله */}
+							<div>
+							  <label className={`mb-1 block text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+								Effective Date
+							  </label>
+							  <JalaaliDatePicker
+								value={addForm.adjustment.effective_date}
+								onChange={(date) => setAddForm({
+								  ...addForm,
+								  adjustment: { ...addForm.adjustment, effective_date: date }
+								})}
+								placeholder="Select date"
+							  />
+							</div>
+						  </div>
+
+						</div>
+					  )}
+					</div>
+
+
+					{/* 🔑 ۲. Contract Modification  */}
+					<div className={`rounded-lg border p-4 ${
+					  addForm.contract_modification.percentage > 0
+						? (isDark ? "border-indigo-700 bg-indigo-950/30" : "border-indigo-200 bg-indigo-50/30")
+						: (isDark ? "border-slate-700 bg-slate-800/20" : "border-slate-200 bg-slate-50/20")
+					}`}>
+					  <div className="flex items-center gap-2 mb-3">
+						<span className="text-base">🔄</span>
+						<h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+						  Contract Modification
+						</h4>
+					  </div>
+
+					  <div className="relative">
+						<input
+						  type="text"
+						  inputMode="decimal"
+						  value={addForm.contract_modification?.percentage ? formatNumberInput(String(addForm.contract_modification.percentage)) : ""}
+						  onChange={(e) => {
+							const raw = e.target.value.replace(/[^0-9.]/g, "");
+							const parts = raw.split(".");
+							const clean = parts.length > 2 ? parts[0] + "." + parts.slice(1).join("") : raw;
+							setAddForm({
+							  ...addForm,
+							  contract_modification: { percentage: Number(clean) || 0 }
+							});
+						  }}
+						  onBlur={(e) => {
+							// موقع از دست دادن فوکوس، فرمت کن
+							const val = addForm.contract_modification?.percentage || 0;
+							if (val > 0) {
+							  setAddForm({
+								...addForm,
+								contract_modification: { percentage: val }
+							  });
+							}
+						  }}
+						  className="w-full rounded-lg border px-3 py-2 pr-8 text-sm font-mono text-right input-themed"
+						  placeholder="0"
+						/>
+						<span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>%</span>
+					  </div>
+					   
+					  {/* 🔑 نمایش خروجی - بدون NaN */}
+						  {addForm.contract_modification.percentage > 0 && (
+							<div className={`mt-3 rounded-lg border p-3 ${
+							  isDark ? "border-indigo-700 bg-indigo-950/30" : "border-indigo-200 bg-indigo-50/50"
+							}`}>
+							  <div className="flex items-center gap-2 mb-2">
+								<span className="text-sm">📊</span>
+								<h5 className={`text-xs font-bold ${isDark ? "text-indigo-200" : "text-indigo-900"}`}>
+								  Applied to both:
+								</h5>
+							  </div>
+							  <div className="grid grid-cols-2 gap-2 text-xs">
+								{/* 💰 Ceiling - فقط اگه total_value > 0 */}
+								<div className={`flex justify-between p-2 rounded ${isDark ? "bg-slate-800/50" : "bg-white/70"}`}>
+								  <span className={isDark ? "text-slate-300" : "text-slate-600"}>💰 Ceiling:</span>
+								  <span className="font-bold font-mono text-indigo-500">
+									{addForm.total_value > 0 
+									  ? `+${formatCurrency((addForm.total_value * addForm.contract_modification.percentage) / 100, addForm.currency)}`
+									  : "—"
+									}
+								  </span>
+								</div>
+								
+								{/* 📅 Duration - فقط اگه تاریخ‌ها پر باشن */}
+								<div className={`flex justify-between p-2 rounded ${isDark ? "bg-slate-800/50" : "bg-white/70"}`}>
+								  <span className={isDark ? "text-slate-300" : "text-slate-600"}>📅 Duration:</span>
+								  <span className="font-bold font-mono text-indigo-500">
+									{addForm.start_date && addForm.end_date ? (() => {
+									  try {
+										const [startJy, startJm, startJd] = addForm.start_date.split('/').map(Number);
+										const [endJy, endJm, endJd] = addForm.end_date.split('/').map(Number);
+										
+										if (!startJy || !endJy) return "—";
+										
+										const startG = jalaali.toGregorian(startJy, startJm, startJd);
+										const endG = jalaali.toGregorian(endJy, endJm, endJd);
+										const startDate = new Date(startG.gy, startG.gm - 1, startG.gd);
+										const endDate = new Date(endG.gy, endG.gm - 1, endG.gd);
+										const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+										
+										if (totalDays <= 0 || isNaN(totalDays)) return "—";
+										
+										const modifiedDays = Math.round((totalDays * addForm.contract_modification.percentage) / 100);
+										return `+${Math.abs(modifiedDays)} days`;
+									  } catch {
+										return "—";
+									  }
+									})() : "—"}
+								  </span>
+								</div>
+							  </div>
+							</div>
+						  )}
+  
+					</div>
+                    </div>
+                  </div>
+
+                  {/* ۳. ضمانت‌نامه */}
+                  <div className={`rounded-lg border p-4 ${
+                    addForm.guarantee.has_guarantee
+                      ? (isDark ? "border-emerald-700 bg-emerald-950/30" : "border-emerald-200 bg-emerald-50/30")
+                      : (isDark ? "border-slate-700 bg-slate-800/20" : "border-slate-200 bg-slate-50/20")
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🏦</span>
+                        <h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                          Performance Guarantee
+                        </h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAddForm({
+                          ...addForm,
+                          guarantee: { ...addForm.guarantee, has_guarantee: !addForm.guarantee.has_guarantee }
+                        })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          addForm.guarantee.has_guarantee ? "bg-emerald-600" : (isDark ? "bg-slate-700" : "bg-slate-300")
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          addForm.guarantee.has_guarantee ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      </button>
+                    </div>
+
+                    {addForm.guarantee.has_guarantee && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={`mb-1 block text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+                            Percentage (%)
+                          </label>
+                          <input
+							  type="text"
+							  inputMode="decimal"
+							  value={addForm.guarantee.percentage ? formatNumberInput(String(addForm.guarantee.percentage)) : ""}
+							  onChange={(e) => setAddForm({
+								...addForm,
+								guarantee: { ...addForm.guarantee, percentage: parseNumberInput(e.target.value) }
+							  })}
+							  className="w-full rounded-lg border px-3 py-2 text-sm font-mono text-right input-themed"
+							  placeholder="0.00"
+							/>
+                          {addForm.total_value > 0 && addForm.guarantee.percentage > 0 && (
+                            <p className={`text-[10px] mt-1 font-semibold ${isDark ? "text-emerald-400" : "text-emerald-700"}`}>
+                              ≈ {formatCurrency((addForm.total_value * addForm.guarantee.percentage) / 100, addForm.currency)}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className={`mb-1 block text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+                            Guarantee Type
+                          </label>
+                          <select
+                            value={addForm.guarantee.type}
+                            onChange={(e) => setAddForm({
+                              ...addForm,
+                              guarantee: { ...addForm.guarantee, type: e.target.value as any }
+                            })}
+                            className="w-full rounded-lg border px-3 py-2 text-sm input-themed"
+                          >
+                            <option value="BANK_GUARANTEE">🏦 Bank Guarantee</option>
+                            <option value="CHECK">📝 Check</option>
+                            <option value="PROMISSORY_NOTE">📄 Promissory Note</option>
+                            <option value="CASH_BLOCK">💰 Cash Block</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ۴. حسن انجام کار و بیمه */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/20" : "border-slate-200 bg-slate-50/20"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base">✅</span>
+                        <h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Good Performance</h4>
+                      </div>
+                      <div className="relative">
+                        <input
+						  type="text"
+						  inputMode="decimal"
+						  value={addForm.good_performance_percentage ? formatNumberInput(String(addForm.good_performance_percentage)) : ""}
+						  onChange={(e) => setAddForm({ ...addForm, good_performance_percentage: parseNumberInput(e.target.value) })}
+						  className="w-full rounded-lg border px-3 py-2 pr-8 text-sm font-mono text-right input-themed"
+						  placeholder="10.00"
+						/>
+                        <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>%</span>
+                      </div>
+                      <p className={`text-[10px] mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>From each invoice</p>
+                    </div>
+
+                    <div className={`rounded-lg border p-4 ${isDark ? "border-slate-700 bg-slate-800/20" : "border-slate-200 bg-slate-50/20"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-base">🏥</span>
+                        <h4 className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Insurance Deduction</h4>
+                      </div>
+                      <div className="relative">
+                        <input
+						  type="text"
+						  inputMode="decimal"
+						  value={addForm.insurance_deduction_percentage ? formatNumberInput(String(addForm.insurance_deduction_percentage)) : ""}
+						  onChange={(e) => setAddForm({ ...addForm, insurance_deduction_percentage: parseNumberInput(e.target.value) })}
+						  className="w-full rounded-lg border px-3 py-2 pr-8 text-sm font-mono text-right input-themed"
+						  placeholder="16.67"
+						/>
+                        <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>%</span>
+                      </div>
+                      <p className={`text-[10px] mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>From each invoice</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">Currency</label>
-                  <select
-                    value={addForm.currency}
-                    onChange={(e) => setAddForm({ ...addForm, currency: e.target.value })}
-                    className="w-full rounded-lg px-3 py-2 text-sm input-themed"
-                  >
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="IRR">IRR</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-primary">Status</label>
-                  <select
-                    value={addForm.status}
-                    onChange={(e) => setAddForm({ ...addForm, status: e.target.value as any })}
-                    className="w-full rounded-lg px-3 py-2 text-sm input-themed"
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="COMPLETED">COMPLETED</option>
-                  </select>
-                </div>
-              </div>
+              
+
+              {/* 🔑 بخش ضمایم قرارداد */}
+              <ContractAttachmentsEditor
+                attachments={addForm.attachments}
+                onChange={(attachments) => setAddForm({ ...addForm, attachments })}
+                isDark={isDark}
+              />
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-primary">Description</label>
@@ -1885,6 +2695,7 @@ const handleAddClick = () => {
             </>
           ) : (
             <>
+              {/* WORK_ORDER form - unchanged */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-primary">Source Type *</label>
                 <div className="flex gap-2">
@@ -2339,7 +3150,7 @@ const handleAddClick = () => {
             <div className={`rounded-lg border p-4 ${isDark ? "border-indigo-700 bg-indigo-950/50" : "border-indigo-200 bg-indigo-50/50"}`}>
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-sm font-bold">
-                  {selectedClientForView.name_en.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase()}
+                  {selectedClientForView.name_en.split(/\s+/).slice(0, 2).map(w => w[0]).join(" ").toUpperCase()}
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-semibold text-primary">{selectedClientForView.name_en}</h3>
@@ -2416,7 +3227,7 @@ const handleAddClick = () => {
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-secondary" dir="rtl">{contract.start_date} → {contract.end_date}</span>
+                        <span className="text-secondary">{contract.start_date} → {contract.end_date}</span>
                         <span className="font-semibold text-primary">{formatCurrency(contract.total_value, contract.currency)}</span>
                       </div>
                       <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-100"}`}>

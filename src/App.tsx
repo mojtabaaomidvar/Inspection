@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Sidebar, ViewKey } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { Dashboard } from "./views/Dashboard";
@@ -9,6 +9,8 @@ import { Inspections } from "./views/Inspections";
 import { Billing } from "./views/Billing";
 import { Reports } from "./views/Reports";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
+import { usePersistedState } from "./hooks/usePersistedState";
+import { calculateDaysLeft, getDaysUntilStart } from "./lib/formatters";
 
 const meta: Record<ViewKey, { title: string; subtitle: string }> = {
   dashboard: { title: "Operations Dashboard", subtitle: "Live overview of inspections, revenue, and inspector workload" },
@@ -25,13 +27,25 @@ function AppContent() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const { isDark } = useTheme();
   
+  // 🔑 لود قراردادها برای محاسبه expiring count
+  const [contracts] = usePersistedState<any[]>("ics_contracts", []);
+
+  // 🔑 محاسبه تعداد قراردادهای در آستانه پایان
+  const expiringCount = useMemo(() => {
+    return contracts.filter((c: any) => {
+      if (c.status !== "ACTIVE") return false;
+      const daysLeft = calculateDaysLeft(c.end_date);
+      const daysUntilStart = getDaysUntilStart(c.start_date);
+      return daysUntilStart <= 0 && daysLeft > 0 && daysLeft <= 132;
+    }).length;
+  }, [contracts]);
+
   const m = meta[view] ?? meta.dashboard;
 
   return (
     <div className={`min-h-screen font-sans antialiased transition-colors ${
       isDark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
     }`}>
-      {/* 🔑 هدر: کل عرض، ثابت در بالا */}
       <Header
         title={m.title}
         subtitle={m.subtitle}
@@ -39,19 +53,18 @@ function AppContent() {
         onToggleSidebar={() => setSidebarExpanded(!sidebarExpanded)}
       />
 
-      {/* 🔑 سایدبار: ثابت، زیر هدر */}
       <Sidebar
         active={view}
         onSelect={setView}
         isExpanded={sidebarExpanded}
+        expiringContractsCount={expiringCount}
       />
 
-      {/* 🔑 محتوای اصلی: با margin مناسب */}
       <main
         className="transition-all duration-300"
         style={{
           marginLeft: sidebarExpanded ? "16rem" : "5rem",
-          paddingTop: "4rem", // ارتفاع هدر
+          paddingTop: "4rem",
         }}
       >
         <div className="p-6 lg:p-8">

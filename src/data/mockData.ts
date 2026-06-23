@@ -434,7 +434,7 @@ export const contracts: Contract[] = [
     client_name: "Mapna Group",
     contract_title: "Damavand Combined Cycle Power Plant — MWS Campaign",
     start_date: "1404/08/10",
-    end_date: "1405/08/09",
+    end_date: "1405/04/09",
     total_value: 280000,
     invoiced: 210500,
     currency: "USD",

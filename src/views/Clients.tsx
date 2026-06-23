@@ -4,7 +4,7 @@ import { clients as initialClients, contracts as initialContracts, contractTarif
 import { formatCurrency, formatDate } from "../lib/formatters";
 import { exportToExcel } from "../lib/exportToExcel";
 import { validateNationalCode, validateNationalId, validateMobile } from "../lib/validators";
-import jalaali from "jalaali-js";
+import * as jalaali from "jalaali-js";
 import { useTheme } from "../contexts/ThemeContext";
 import { usePersistedState } from '../hooks/usePersistedState';
 
@@ -472,7 +472,7 @@ export function Clients() {
 				  type="text"
 				  value={searchQuery}
 				  onChange={(e) => setSearchQuery(e.target.value)}
-				  placeholder="Search by name, Code..."
+				  placeholder="Search by Name, ..."
 				  className="w-full rounded-lg py-2 pl-9 pr-8 text-sm input-themed"
 				/>
 				{searchQuery && (
@@ -573,32 +573,32 @@ export function Clients() {
 			: "from-white via-white/95 to-white/0"
 		}`} />
 		<div className="absolute bottom-5 left-0 right-0 px-4 z-20 flex gap-2">
-  <Button 
-    variant="primary" 
-    size="md" 
-    onClick={handleAddClick} 
-    className={`flex-1 justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
-      isDark 
-        ? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
-        : "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
-    }`}
-  >
-    <span>➕</span> Add New Client
-  </Button>
-  <Button
-    variant="secondary"
-    size="md"
-    onClick={handleExportToExcel}
-    className={`transition-all duration-300 hover:-translate-y-0.5 ${
-      isDark 
-        ? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
-        : "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
-    }`}
-    title="Export to Excel"
-  >
-    📥
-  </Button>
-</div>
+		  <Button 
+			variant="primary" 
+			size="md" 
+			onClick={handleAddClick} 
+			className={`flex-1 justify-center gap-2 transition-all duration-300 hover:-translate-y-0.5 ${
+			  isDark 
+				? "border border-indigo-400/30 shadow-[0_8px_24px_rgba(99,102,241,0.4)] hover:shadow-[0_12px_32px_rgba(99,102,241,0.6)]" 
+				: "shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30"
+			}`}
+		  >
+			<span>➕</span> Add New Client
+		  </Button>
+		  <Button
+			variant="secondary"
+			size="md"
+			onClick={handleExportToExcel}
+			className={`transition-all duration-300 hover:-translate-y-0.5 ${
+			  isDark 
+				? "border border-slate-700 shadow-[0_8px_24px_rgba(0,0,0,0.3)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.5)]" 
+				: "shadow-lg shadow-slate-300/50 hover:shadow-xl hover:shadow-slate-400/50"
+			}`}
+			title="Export to Excel"
+		  >
+			📥
+		  </Button>
+		</div>
       </div>
 
       {/* RIGHT PANEL */}
